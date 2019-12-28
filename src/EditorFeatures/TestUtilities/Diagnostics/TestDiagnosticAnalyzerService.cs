@@ -4,6 +4,7 @@ using System;
 using System.Collections.Generic;
 using System.Collections.Immutable;
 using Microsoft.CodeAnalysis.Diagnostics.Log;
+using Microsoft.CodeAnalysis.Shared.TestHooks;
 using Microsoft.CodeAnalysis.Editor.UnitTests.Diagnostics;
 using Roslyn.Utilities;
 
@@ -27,8 +28,9 @@ namespace Microsoft.CodeAnalysis.Diagnostics
             string language,
             ImmutableArray<DiagnosticAnalyzer> analyzers,
             AbstractHostDiagnosticUpdateSource hostDiagnosticUpdateSource = null,
-            Action<Exception, DiagnosticAnalyzer, Diagnostic> onAnalyzerException = null)
-            : this(CreateHostAnalyzerManager(language, analyzers, hostDiagnosticUpdateSource), hostDiagnosticUpdateSource, onAnalyzerException)
+            Action<Exception, DiagnosticAnalyzer, Diagnostic> onAnalyzerException = null,
+            IAsynchronousOperationListener listener = null)
+            : this(CreateHostAnalyzerManager(language, analyzers, hostDiagnosticUpdateSource), hostDiagnosticUpdateSource, onAnalyzerException, listener: listener)
         {
         }
 
@@ -50,13 +52,14 @@ namespace Microsoft.CodeAnalysis.Diagnostics
         }
 
         private TestDiagnosticAnalyzerService(
-            HostAnalyzerManager hostAnalyzerManager,
+            DiagnosticAnalyzerInfoCache analyzerInfoCache,
             AbstractHostDiagnosticUpdateSource hostDiagnosticUpdateSource,
             Action<Exception, DiagnosticAnalyzer, Diagnostic> onAnalyzerException,
-            IDiagnosticUpdateSourceRegistrationService registrationService = null)
-            : base(hostAnalyzerManager, hostDiagnosticUpdateSource, registrationService ?? new MockDiagnosticUpdateSourceRegistrationService())
+            IDiagnosticUpdateSourceRegistrationService registrationService = null,
+            IAsynchronousOperationListener listener = null)
+            : base(analyzerInfoCache, hostDiagnosticUpdateSource, registrationService ?? new MockDiagnosticUpdateSourceRegistrationService(), listener)
         {
-            _hostAnalyzerReferenceMap = hostAnalyzerManager.CreateAnalyzerReferencesMap(projectOpt: null);
+            _hostAnalyzerReferenceMap = analyzerInfoCache.CreateAnalyzerReferencesMap(project: null);
             _onAnalyzerException = onAnalyzerException;
         }
 
@@ -70,27 +73,27 @@ namespace Microsoft.CodeAnalysis.Diagnostics
             _onAnalyzerException = onAnalyzerException;
         }
 
-        private static HostAnalyzerManager CreateHostAnalyzerManager(string language, DiagnosticAnalyzer analyzer, AbstractHostDiagnosticUpdateSource hostDiagnosticUpdateSource)
+        private static DiagnosticAnalyzerInfoCache CreateHostAnalyzerManager(string language, DiagnosticAnalyzer analyzer, AbstractHostDiagnosticUpdateSource hostDiagnosticUpdateSource)
         {
             return CreateHostAnalyzerManager(language, ImmutableArray.Create(analyzer), hostDiagnosticUpdateSource);
         }
 
-        private static HostAnalyzerManager CreateHostAnalyzerManager(string language, ImmutableArray<DiagnosticAnalyzer> analyzers, AbstractHostDiagnosticUpdateSource hostDiagnosticUpdateSource)
+        private static DiagnosticAnalyzerInfoCache CreateHostAnalyzerManager(string language, ImmutableArray<DiagnosticAnalyzer> analyzers, AbstractHostDiagnosticUpdateSource hostDiagnosticUpdateSource)
         {
             var map = ImmutableDictionary.CreateRange(
                 SpecializedCollections.SingletonEnumerable(KeyValuePairUtil.Create(language, analyzers)));
             return CreateHostAnalyzerManager(map, hostDiagnosticUpdateSource);
         }
 
-        private static HostAnalyzerManager CreateHostAnalyzerManager(ImmutableDictionary<string, ImmutableArray<DiagnosticAnalyzer>> analyzersMap, AbstractHostDiagnosticUpdateSource hostDiagnosticUpdateSource)
+        private static DiagnosticAnalyzerInfoCache CreateHostAnalyzerManager(ImmutableDictionary<string, ImmutableArray<DiagnosticAnalyzer>> analyzersMap, AbstractHostDiagnosticUpdateSource hostDiagnosticUpdateSource)
         {
             var analyzerReferences = ImmutableArray.Create<AnalyzerReference>(new TestAnalyzerReferenceByLanguage(analyzersMap));
             return CreateHostAnalyzerManager(analyzerReferences, hostDiagnosticUpdateSource);
         }
 
-        private static HostAnalyzerManager CreateHostAnalyzerManager(ImmutableArray<AnalyzerReference> hostAnalyzerReferences, AbstractHostDiagnosticUpdateSource hostDiagnosticUpdateSource)
+        private static DiagnosticAnalyzerInfoCache CreateHostAnalyzerManager(ImmutableArray<AnalyzerReference> hostAnalyzerReferences, AbstractHostDiagnosticUpdateSource hostDiagnosticUpdateSource)
         {
-            return new HostAnalyzerManager(hostAnalyzerReferences, hostDiagnosticUpdateSource);
+            return new DiagnosticAnalyzerInfoCache(hostAnalyzerReferences, hostDiagnosticUpdateSource);
         }
 
         internal override Action<Exception, DiagnosticAnalyzer, Diagnostic> GetOnAnalyzerException(ProjectId projectId, DiagnosticLogAggregator diagnosticLogAggregator)

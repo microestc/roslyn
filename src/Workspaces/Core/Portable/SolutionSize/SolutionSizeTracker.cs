@@ -5,9 +5,9 @@ using System.Composition;
 using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.CodeAnalysis.Host;
+using Microsoft.CodeAnalysis.Host.Mef;
 using Microsoft.CodeAnalysis.Options;
 using Microsoft.CodeAnalysis.SolutionCrawler;
-using Roslyn.Utilities;
 
 namespace Microsoft.CodeAnalysis.SolutionSize
 {
@@ -20,6 +20,14 @@ namespace Microsoft.CodeAnalysis.SolutionSize
     {
         private readonly IncrementalAnalyzer _tracker = new IncrementalAnalyzer();
 
+        [ImportingConstructor]
+        public SolutionSizeTracker()
+        {
+        }
+
+        private bool IsSupported(Workspace workspace)
+            => workspace.Services.GetRequiredService<IPersistentStorageLocationService>().IsSupported(workspace);
+
         /// <summary>
         /// Get approximate solution size at the point of call.
         /// 
@@ -29,18 +37,10 @@ namespace Microsoft.CodeAnalysis.SolutionSize
         /// lazy and very cheap on answering that question.
         /// </summary>
         public long GetSolutionSize(Workspace workspace, SolutionId solutionId)
-        {
-            var service = workspace.Services.GetService<IPersistentStorageLocationService>();
-            return service.IsSupported(workspace)
-                ? _tracker.GetSolutionSize(solutionId)
-                : -1;
-        }
+            => IsSupported(workspace) ? _tracker.GetSolutionSize(solutionId) : -1;
 
         IIncrementalAnalyzer IIncrementalAnalyzerProvider.CreateIncrementalAnalyzer(Workspace workspace)
-        {
-            var service = workspace.Services.GetService<IPersistentStorageLocationService>();
-            return service.IsSupported(workspace) ? _tracker : null;
-        }
+            => IsSupported(workspace) ? _tracker : null;
 
         internal class IncrementalAnalyzer : IIncrementalAnalyzer
         {

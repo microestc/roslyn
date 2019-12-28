@@ -7,7 +7,6 @@ using Microsoft.CodeAnalysis.LanguageServices;
 using Microsoft.CodeAnalysis.PooledObjects;
 using Microsoft.CodeAnalysis.Shared.Extensions;
 using Microsoft.CodeAnalysis.UseCollectionInitializer;
-using Roslyn.Utilities;
 
 namespace Microsoft.CodeAnalysis.UseObjectInitializer
 {
@@ -28,12 +27,7 @@ namespace Microsoft.CodeAnalysis.UseObjectInitializer
         where TVariableDeclaratorSyntax : SyntaxNode
     {
         private static readonly ObjectPool<ObjectCreationExpressionAnalyzer<TExpressionSyntax, TStatementSyntax, TObjectCreationExpressionSyntax, TMemberAccessExpressionSyntax, TAssignmentStatementSyntax, TVariableDeclaratorSyntax>> s_pool
-            = new ObjectPool<ObjectCreationExpressionAnalyzer<TExpressionSyntax, TStatementSyntax, TObjectCreationExpressionSyntax, TMemberAccessExpressionSyntax, TAssignmentStatementSyntax, TVariableDeclaratorSyntax>>(
-                () => new ObjectCreationExpressionAnalyzer<TExpressionSyntax, TStatementSyntax, TObjectCreationExpressionSyntax, TMemberAccessExpressionSyntax, TAssignmentStatementSyntax, TVariableDeclaratorSyntax>());
-
-        private ObjectCreationExpressionAnalyzer()
-        {
-        }
+            = SharedPools.Default<ObjectCreationExpressionAnalyzer<TExpressionSyntax, TStatementSyntax, TObjectCreationExpressionSyntax, TMemberAccessExpressionSyntax, TAssignmentStatementSyntax, TVariableDeclaratorSyntax>>();
 
         public static ImmutableArray<Match<TExpressionSyntax, TStatementSyntax, TMemberAccessExpressionSyntax, TAssignmentStatementSyntax>>? Analyze(
             SemanticModel semanticModel,
@@ -79,8 +73,7 @@ namespace Microsoft.CodeAnalysis.UseObjectInitializer
                     break;
                 }
 
-                var statement = child.AsNode() as TAssignmentStatementSyntax;
-                if (statement == null)
+                if (!(child.AsNode() is TAssignmentStatementSyntax statement))
                 {
                     break;
                 }
@@ -154,7 +147,7 @@ namespace Microsoft.CodeAnalysis.UseObjectInitializer
                 }
 
                 // found a match!
-                seenNames = seenNames ?? new HashSet<string>();
+                seenNames ??= new HashSet<string>();
 
                 // If we see an assignment to the same property/field, we can't convert it
                 // to an initializer.
@@ -222,7 +215,7 @@ namespace Microsoft.CodeAnalysis.UseObjectInitializer
         }
     }
 
-    internal struct Match<
+    internal readonly struct Match<
         TExpressionSyntax,
         TStatementSyntax,
         TMemberAccessExpressionSyntax,

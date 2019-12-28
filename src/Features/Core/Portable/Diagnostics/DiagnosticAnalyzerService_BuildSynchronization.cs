@@ -2,7 +2,6 @@
 
 using System.Collections.Immutable;
 using System.Threading.Tasks;
-using Roslyn.Utilities;
 
 namespace Microsoft.CodeAnalysis.Diagnostics
 {
@@ -17,7 +16,7 @@ namespace Microsoft.CodeAnalysis.Diagnostics
         {
             if (_map.TryGetValue(workspace, out var analyzer))
             {
-                return analyzer.SynchronizeWithBuildAsync(workspace, diagnostics);
+                return analyzer.SynchronizeWithBuildAsync(diagnostics);
             }
 
             return Task.CompletedTask;

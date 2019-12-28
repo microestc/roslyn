@@ -3,29 +3,23 @@
 using System.Collections.Immutable;
 using System.Diagnostics;
 using System.Linq;
+using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp.Symbols;
 using Microsoft.CodeAnalysis.SymbolDisplay;
+using Microsoft.CodeAnalysis.Symbols;
 using Roslyn.Utilities;
 
 namespace Microsoft.CodeAnalysis.CSharp
 {
     internal partial class SymbolDisplayVisitor
     {
-        private void VisitTypeSymbolWithAnnotations(TypeSymbolWithAnnotations type, AbstractSymbolDisplayVisitor visitorOpt = null)
-        {
-            var visitor = (SymbolDisplayVisitor)(visitorOpt ?? this.NotFirstVisitor);
-            var typeSymbol = type.TypeSymbol;
-
-            typeSymbol.Accept(visitor);
-            AddNullableAnnotations(type);
-        }
-
         public override void VisitArrayType(IArrayTypeSymbol symbol)
         {
-            VisitArrayType(symbol, typeOpt: default);
+            VisitArrayTypeWithoutNullability(symbol);
+            AddNullableAnnotations(symbol);
         }
 
-        private void VisitArrayType(IArrayTypeSymbol symbol, TypeSymbolWithAnnotations typeOpt)
+        private void VisitArrayTypeWithoutNullability(IArrayTypeSymbol symbol)
         {
             if (TryAddAlias(symbol, builder))
             {
@@ -50,28 +44,19 @@ namespace Microsoft.CodeAnalysis.CSharp
                 return;
             }
 
-            TypeSymbolWithAnnotations underlyingTypeWithAnnotations;
             ITypeSymbol underlyingType = symbol;
             do
             {
-                underlyingTypeWithAnnotations = (underlyingType as ArrayTypeSymbol)?.ElementType ?? default;
                 underlyingType = ((IArrayTypeSymbol)underlyingType).ElementType;
             }
-            while (underlyingType.Kind == SymbolKind.ArrayType && !ShouldAddNullableAnnotation(underlyingTypeWithAnnotations));
+            while (underlyingType.Kind == SymbolKind.ArrayType && !ShouldAddNullableAnnotation(underlyingType));
 
-            if (!underlyingTypeWithAnnotations.IsNull)
-            {
-                VisitTypeSymbolWithAnnotations(underlyingTypeWithAnnotations);
-            }
-            else
-            {
-                underlyingType.Accept(this.NotFirstVisitor);
-            }
+            underlyingType.Accept(this.NotFirstVisitor);
 
             var arrayType = symbol;
             while (arrayType != null && arrayType != underlyingType)
             {
-                if (!(arrayType is null) && !this.isFirstSymbolVisited)
+                if (!this.isFirstSymbolVisited)
                 {
                     AddCustomModifiersIfRequired(arrayType.CustomModifiers, leadingSpace: true);
                 }
@@ -81,32 +66,34 @@ namespace Microsoft.CodeAnalysis.CSharp
             }
         }
 
-        private void AddNullableAnnotations(TypeSymbolWithAnnotations typeOpt)
+        private void AddNullableAnnotations(ITypeSymbol type)
         {
-            if (ShouldAddNullableAnnotation(typeOpt))
+            if (ShouldAddNullableAnnotation(type))
             {
-                AddPunctuation(typeOpt.NullableAnnotation.IsAnyNullable() ? SyntaxKind.QuestionToken : SyntaxKind.ExclamationToken);
+                AddPunctuation(type.NullableAnnotation == CodeAnalysis.NullableAnnotation.Annotated ? SyntaxKind.QuestionToken : SyntaxKind.ExclamationToken);
             }
         }
 
-        private bool ShouldAddNullableAnnotation(TypeSymbolWithAnnotations typeOpt)
+        private bool ShouldAddNullableAnnotation(ITypeSymbol type)
         {
-            if (typeOpt.IsNull)
+            switch (type.NullableAnnotation)
             {
-                return false;
-            }
-            else if (format.MiscellaneousOptions.IncludesOption(SymbolDisplayMiscellaneousOptions.IncludeNullableReferenceTypeModifier) &&
-                !typeOpt.IsNullableType() && !typeOpt.IsValueType &&
-                (typeOpt.NullableAnnotation == NullableAnnotation.Annotated ||
-                 (typeOpt.NullableAnnotation == NullableAnnotation.Nullable && !typeOpt.TypeSymbol.IsTypeParameterDisallowingAnnotation())))
-            {
-                return true;
-            }
-            else if (format.CompilerInternalOptions.IncludesOption(SymbolDisplayCompilerInternalOptions.IncludeNonNullableTypeModifier) &&
-                !typeOpt.IsValueType &&
-                typeOpt.NullableAnnotation.IsAnyNotNullable() && !typeOpt.TypeSymbol.IsTypeParameterDisallowingAnnotation())
-            {
-                return true;
+                case CodeAnalysis.NullableAnnotation.Annotated:
+                    if (format.MiscellaneousOptions.IncludesOption(SymbolDisplayMiscellaneousOptions.IncludeNullableReferenceTypeModifier) &&
+                        !ITypeSymbolHelpers.IsNullableType(type) && !type.IsValueType)
+                    {
+                        return true;
+                    }
+                    break;
+
+                case CodeAnalysis.NullableAnnotation.NotAnnotated:
+                    if (format.CompilerInternalOptions.IncludesOption(SymbolDisplayCompilerInternalOptions.IncludeNonNullableTypeModifier) &&
+                        !type.IsValueType &&
+                        (type as Symbols.PublicModel.TypeSymbol)?.UnderlyingTypeSymbol.IsTypeParameterDisallowingAnnotation() != true)
+                    {
+                        return true;
+                    }
+                    break;
             }
 
             return false;
@@ -127,9 +114,7 @@ namespace Microsoft.CodeAnalysis.CSharp
             }
             else
             {
-                var array = symbol as ArrayTypeSymbol;
-
-                if ((object)array != null && !array.IsSZArray)
+                if (!symbol.IsSZArray)
                 {
                     // Always add an asterisk in this case in order to distinguish between SZArray and MDArray.
                     AddPunctuation(SyntaxKind.AsteriskToken);
@@ -151,22 +136,14 @@ namespace Microsoft.CodeAnalysis.CSharp
 
         public override void VisitPointerType(IPointerTypeSymbol symbol)
         {
-            var pointer = symbol as PointerTypeSymbol;
+            symbol.PointedAtType.Accept(this.NotFirstVisitor);
 
-            if ((object)pointer == null)
-            {
-                symbol.PointedAtType.Accept(this.NotFirstVisitor);
-            }
-            else
-            {
-                VisitTypeSymbolWithAnnotations(pointer.PointedAtType);
-            }
+            AddNullableAnnotations(symbol);
 
             if (!this.isFirstSymbolVisited)
             {
                 AddCustomModifiersIfRequired(symbol.CustomModifiers, leadingSpace: true);
             }
-
             AddPunctuation(SyntaxKind.AsteriskToken);
         }
 
@@ -179,14 +156,24 @@ namespace Microsoft.CodeAnalysis.CSharp
 
             //variance and constraints are handled by methods and named types
             builder.Add(CreatePart(SymbolDisplayPartKind.TypeParameterName, symbol, symbol.Name));
+
+            AddNullableAnnotations(symbol);
         }
 
         public override void VisitDynamicType(IDynamicTypeSymbol symbol)
         {
             builder.Add(CreatePart(SymbolDisplayPartKind.Keyword, symbol, symbol.Name));
+
+            AddNullableAnnotations(symbol);
         }
 
         public override void VisitNamedType(INamedTypeSymbol symbol)
+        {
+            VisitNamedTypeWithoutNullability(symbol);
+            AddNullableAnnotations(symbol);
+        }
+
+        private void VisitNamedTypeWithoutNullability(INamedTypeSymbol symbol)
         {
             if (this.IsMinimizing && TryAddAlias(symbol, builder))
             {
@@ -222,7 +209,7 @@ namespace Microsoft.CodeAnalysis.CSharp
                 }
             }
 
-            if (this.IsMinimizing || symbol.IsTupleType)
+            if (this.IsMinimizing || (symbol.IsTupleType && !ShouldDisplayAsValueTuple(symbol)))
             {
                 MinimallyQualify(symbol);
                 return;
@@ -285,6 +272,18 @@ namespace Microsoft.CodeAnalysis.CSharp
             AddNameAndTypeArgumentsOrParameters(symbol);
         }
 
+        private bool ShouldDisplayAsValueTuple(INamedTypeSymbol symbol)
+        {
+            Debug.Assert(symbol.IsTupleType);
+
+            if (format.CompilerInternalOptions.IncludesOption(SymbolDisplayCompilerInternalOptions.UseValueTuple))
+            {
+                return true;
+            }
+
+            return !CanUseTupleSyntax(symbol);
+        }
+
         private void AddNameAndTypeArgumentsOrParameters(INamedTypeSymbol symbol)
         {
             if (symbol.IsAnonymousType)
@@ -292,43 +291,34 @@ namespace Microsoft.CodeAnalysis.CSharp
                 AddAnonymousTypeName(symbol);
                 return;
             }
-            else if (symbol.IsTupleType)
+            else if (symbol.IsTupleType && !ShouldDisplayAsValueTuple(symbol))
             {
-                // If top level tuple uses non-default names, there is no way to preserve them
-                // unless we use tuple syntax for the type. So, we give them priority.
-                if (!format.CompilerInternalOptions.IncludesOption(SymbolDisplayCompilerInternalOptions.UseValueTuple))
-                {
-                    if (HasNonDefaultTupleElements(symbol) || CanUseTupleTypeName(symbol))
-                    {
-                        AddTupleTypeName(symbol);
-                        return;
-                    }
-                }
-                // Fall back to displaying the underlying type.
-                symbol = symbol.TupleUnderlyingType;
+                AddTupleTypeName(symbol);
+                return;
             }
 
             string symbolName = null;
 
             // It would be nice to handle VB NoPia symbols too, but it's not worth the effort.
 
-            var illegalGenericInstantiationSymbol = symbol as NoPiaIllegalGenericInstantiationSymbol;
+            NamedTypeSymbol underlyingTypeSymbol = (symbol as Symbols.PublicModel.NamedTypeSymbol)?.UnderlyingNamedTypeSymbol;
+            var illegalGenericInstantiationSymbol = underlyingTypeSymbol as NoPiaIllegalGenericInstantiationSymbol;
 
             if ((object)illegalGenericInstantiationSymbol != null)
             {
-                symbol = illegalGenericInstantiationSymbol.UnderlyingSymbol;
+                symbol = illegalGenericInstantiationSymbol.UnderlyingSymbol.GetPublicSymbol();
             }
             else
             {
-                var ambiguousCanonicalTypeSymbol = symbol as NoPiaAmbiguousCanonicalTypeSymbol;
+                var ambiguousCanonicalTypeSymbol = underlyingTypeSymbol as NoPiaAmbiguousCanonicalTypeSymbol;
 
                 if ((object)ambiguousCanonicalTypeSymbol != null)
                 {
-                    symbol = ambiguousCanonicalTypeSymbol.FirstCandidate;
+                    symbol = ambiguousCanonicalTypeSymbol.FirstCandidate.GetPublicSymbol();
                 }
                 else
                 {
-                    var missingCanonicalTypeSymbol = symbol as NoPiaMissingCanonicalTypeSymbol;
+                    var missingCanonicalTypeSymbol = underlyingTypeSymbol as NoPiaMissingCanonicalTypeSymbol;
 
                     if ((object)missingCanonicalTypeSymbol != null)
                     {
@@ -359,7 +349,7 @@ namespace Microsoft.CodeAnalysis.CSharp
             if (format.CompilerInternalOptions.IncludesOption(SymbolDisplayCompilerInternalOptions.UseArityForGenericTypes))
             {
                 // Only the compiler can set the internal option and the compiler doesn't use other implementations of INamedTypeSymbol.
-                if (((NamedTypeSymbol)symbol).MangleName)
+                if (underlyingTypeSymbol?.MangleName == true)
                 {
                     Debug.Assert(symbol.Arity > 0);
                     builder.Add(CreatePart(InternalSymbolDisplayPartKind.Arity, null,
@@ -369,7 +359,7 @@ namespace Microsoft.CodeAnalysis.CSharp
             else if (symbol.Arity > 0 && format.GenericsOptions.IncludesOption(SymbolDisplayGenericsOptions.IncludeTypeParameters))
             {
                 // It would be nice to handle VB symbols too, but it's not worth the effort.
-                if (symbol is UnsupportedMetadataTypeSymbol || symbol is MissingMetadataTypeSymbol || symbol.IsUnboundGenericType)
+                if (underlyingTypeSymbol is UnsupportedMetadataTypeSymbol || underlyingTypeSymbol is MissingMetadataTypeSymbol || symbol.IsUnboundGenericType)
                 {
                     AddPunctuation(SyntaxKind.LessThanToken);
                     for (int i = 0; i < symbol.Arity - 1; i++)
@@ -381,17 +371,7 @@ namespace Microsoft.CodeAnalysis.CSharp
                 }
                 else
                 {
-                    var modifiers = default(ImmutableArray<ImmutableArray<CustomModifier>>);
-
-                    if (this.format.CompilerInternalOptions.IncludesOption(SymbolDisplayCompilerInternalOptions.IncludeCustomModifiers))
-                    {
-                        var namedType = symbol as NamedTypeSymbol;
-                        if ((object)namedType != null)
-                        {
-                            modifiers = namedType.TypeArgumentsNoUseSiteDiagnostics.SelectAsArray(a => a.CustomModifiers);
-                        }
-                    }
-
+                    ImmutableArray<ImmutableArray<CustomModifier>> modifiers = GetTypeArgumentsModifiers(underlyingTypeSymbol);
                     AddTypeArguments(symbol, modifiers);
 
                     AddDelegateParameters(symbol);
@@ -406,7 +386,7 @@ namespace Microsoft.CodeAnalysis.CSharp
             }
 
             // Only the compiler can set the internal option and the compiler doesn't use other implementations of INamedTypeSymbol.
-            if (symbol.OriginalDefinition is MissingMetadataTypeSymbol &&
+            if (underlyingTypeSymbol?.OriginalDefinition is MissingMetadataTypeSymbol &&
                 format.CompilerInternalOptions.IncludesOption(SymbolDisplayCompilerInternalOptions.FlagMissingMetadataTypes))
             {
                 //add it as punctuation - it's just for testing
@@ -414,6 +394,19 @@ namespace Microsoft.CodeAnalysis.CSharp
                 builder.Add(CreatePart(InternalSymbolDisplayPartKind.Other, symbol, "missing"));
                 AddPunctuation(SyntaxKind.CloseBracketToken);
             }
+        }
+
+        private ImmutableArray<ImmutableArray<CustomModifier>> GetTypeArgumentsModifiers(NamedTypeSymbol underlyingTypeSymbol)
+        {
+            if (this.format.CompilerInternalOptions.IncludesOption(SymbolDisplayCompilerInternalOptions.IncludeCustomModifiers))
+            {
+                if ((object)underlyingTypeSymbol != null)
+                {
+                    return underlyingTypeSymbol.TypeArgumentsWithAnnotationsNoUseSiteDiagnostics.SelectAsArray(a => a.CustomModifiers);
+                }
+            }
+
+            return default;
         }
 
         private void AddDelegateParameters(INamedTypeSymbol symbol)
@@ -453,21 +446,27 @@ namespace Microsoft.CodeAnalysis.CSharp
         /// </summary>
         /// <param name="tupleSymbol"></param>
         /// <returns></returns>
-        private bool CanUseTupleTypeName(INamedTypeSymbol tupleSymbol)
+        private bool CanUseTupleSyntax(INamedTypeSymbol tupleSymbol)
         {
             INamedTypeSymbol currentUnderlying = tupleSymbol.TupleUnderlyingType;
+            if (containsModopt(tupleSymbol))
+            {
+                return false;
+            }
 
             if (currentUnderlying.Arity == 1)
             {
                 return false;
             }
 
-            while (currentUnderlying.Arity == TupleTypeSymbol.RestPosition)
+            while (currentUnderlying.Arity == NamedTypeSymbol.ValueTupleRestPosition)
             {
-                tupleSymbol = (INamedTypeSymbol)currentUnderlying.TypeArguments[TupleTypeSymbol.RestPosition - 1];
+                tupleSymbol = (INamedTypeSymbol)currentUnderlying.TypeArguments[NamedTypeSymbol.ValueTupleRestPosition - 1];
                 Debug.Assert(tupleSymbol.IsTupleType);
 
-                if (HasNonDefaultTupleElements(tupleSymbol))
+                if (tupleSymbol.TypeKind == TypeKind.Error ||
+                    HasNonDefaultTupleElements(tupleSymbol) ||
+                    containsModopt(tupleSymbol))
                 {
                     return false;
                 }
@@ -476,6 +475,19 @@ namespace Microsoft.CodeAnalysis.CSharp
             }
 
             return true;
+
+
+            bool containsModopt(INamedTypeSymbol symbol)
+            {
+                NamedTypeSymbol underlyingTypeSymbol = (symbol as Symbols.PublicModel.NamedTypeSymbol)?.UnderlyingNamedTypeSymbol;
+                ImmutableArray<ImmutableArray<CustomModifier>> modifiers = GetTypeArgumentsModifiers(underlyingTypeSymbol);
+                if (modifiers.IsDefault)
+                {
+                    return false;
+                }
+
+                return modifiers.Any(m => !m.IsEmpty);
+            }
         }
 
         private static bool HasNonDefaultTupleElements(INamedTypeSymbol tupleSymbol)
@@ -509,6 +521,15 @@ namespace Microsoft.CodeAnalysis.CSharp
             }
 
             AddPunctuation(SyntaxKind.CloseParenToken);
+
+            if (symbol.TypeKind == TypeKind.Error &&
+                format.CompilerInternalOptions.IncludesOption(SymbolDisplayCompilerInternalOptions.FlagMissingMetadataTypes))
+            {
+                //add it as punctuation - it's just for testing
+                AddPunctuation(SyntaxKind.OpenBracketToken);
+                builder.Add(CreatePart(InternalSymbolDisplayPartKind.Other, symbol, "missing"));
+                AddPunctuation(SyntaxKind.CloseBracketToken);
+            }
         }
 
         private string CreateAnonymousTypeMember(IPropertySymbol property)
@@ -612,7 +633,7 @@ namespace Microsoft.CodeAnalysis.CSharp
                     builder.Add(new SymbolDisplayPart(SymbolDisplayPartKind.AnonymousTypeIndicator, null, "AnonymousType"));
                     AddSpace();
                 }
-                else if (symbol.IsTupleType)
+                else if (symbol.IsTupleType && !ShouldDisplayAsValueTuple(symbol))
                 {
                     builder.Add(new SymbolDisplayPart(SymbolDisplayPartKind.AnonymousTypeIndicator, null, "Tuple"));
                     AddSpace();
@@ -643,19 +664,16 @@ namespace Microsoft.CodeAnalysis.CSharp
                             break;
 
                         case TypeKind.Struct:
-                            if (symbol is NamedTypeSymbol csharpType)
+                            if (symbol.IsReadOnly)
                             {
-                                if (csharpType.IsReadOnly)
-                                {
-                                    AddKeyword(SyntaxKind.ReadOnlyKeyword);
-                                    AddSpace();
-                                }
+                                AddKeyword(SyntaxKind.ReadOnlyKeyword);
+                                AddSpace();
+                            }
 
-                                if (csharpType.IsRefLikeType)
-                                {
-                                    AddKeyword(SyntaxKind.RefKeyword);
-                                    AddSpace();
-                                }
+                            if (symbol.IsRefLikeType)
+                            {
+                                AddKeyword(SyntaxKind.RefKeyword);
+                                AddSpace();
                             }
 
                             AddKeyword(SyntaxKind.StructKeyword);
@@ -688,17 +706,14 @@ namespace Microsoft.CodeAnalysis.CSharp
         private void AddTypeArguments(ISymbol owner, ImmutableArray<ImmutableArray<CustomModifier>> modifiers)
         {
             ImmutableArray<ITypeSymbol> typeArguments;
-            ImmutableArray<TypeSymbolWithAnnotations>? typeArgumentsWithAnnotations;
 
             if (owner.Kind == SymbolKind.Method)
             {
                 typeArguments = ((IMethodSymbol)owner).TypeArguments;
-                typeArgumentsWithAnnotations = (owner as MethodSymbol)?.TypeArguments;
             }
             else
             {
                 typeArguments = ((INamedTypeSymbol)owner).TypeArguments;
-                typeArgumentsWithAnnotations = (owner as NamedTypeSymbol)?.TypeArgumentsNoUseSiteDiagnostics;
             }
 
             if (typeArguments.Length > 0 && format.GenericsOptions.IncludesOption(SymbolDisplayGenericsOptions.IncludeTypeParameters))
@@ -732,14 +747,7 @@ namespace Microsoft.CodeAnalysis.CSharp
                         visitor = this.NotFirstVisitorNamespaceOrType;
                     }
 
-                    if (typeArgumentsWithAnnotations == null)
-                    {
-                        typeArg.Accept(visitor);
-                    }
-                    else
-                    {
-                        VisitTypeSymbolWithAnnotations(typeArgumentsWithAnnotations.GetValueOrDefault()[i], visitor);
-                    }
+                    typeArg.Accept(visitor);
 
                     if (!modifiers.IsDefault)
                     {
@@ -754,7 +762,8 @@ namespace Microsoft.CodeAnalysis.CSharp
         private static bool TypeParameterHasConstraints(ITypeParameterSymbol typeParam)
         {
             return !typeParam.ConstraintTypes.IsEmpty || typeParam.HasConstructorConstraint ||
-                typeParam.HasReferenceTypeConstraint || typeParam.HasValueTypeConstraint;
+                typeParam.HasReferenceTypeConstraint || typeParam.HasValueTypeConstraint ||
+                typeParam.HasNotNullConstraint;
         }
 
         private void AddTypeParameterConstraints(ImmutableArray<ITypeSymbol> typeArguments)
@@ -780,23 +789,22 @@ namespace Microsoft.CodeAnalysis.CSharp
                             AddSpace();
 
                             bool needComma = false;
-                            var typeParameterSymbol = typeParam as TypeParameterSymbol;
 
                             //class/struct constraint must be first
                             if (typeParam.HasReferenceTypeConstraint)
                             {
                                 AddKeyword(SyntaxKind.ClassKeyword);
 
-                                switch (typeParameterSymbol?.ReferenceTypeConstraintIsNullable) // https://github.com/dotnet/roslyn/issues/26198 Switch to public API when we will have one.
+                                switch (typeParam.ReferenceTypeConstraintNullableAnnotation)
                                 {
-                                    case true:
+                                    case CodeAnalysis.NullableAnnotation.Annotated:
                                         if (format.MiscellaneousOptions.IncludesOption(SymbolDisplayMiscellaneousOptions.IncludeNullableReferenceTypeModifier))
                                         {
                                             AddPunctuation(SyntaxKind.QuestionToken);
                                         }
                                         break;
 
-                                    case false:
+                                    case CodeAnalysis.NullableAnnotation.NotAnnotated:
                                         if (format.CompilerInternalOptions.IncludesOption(SymbolDisplayCompilerInternalOptions.IncludeNonNullableTypeModifier))
                                         {
                                             AddPunctuation(SyntaxKind.ExclamationToken);
@@ -816,8 +824,11 @@ namespace Microsoft.CodeAnalysis.CSharp
                                 AddKeyword(SyntaxKind.StructKeyword);
                                 needComma = true;
                             }
-
-                            ImmutableArray<TypeSymbolWithAnnotations>? annotatedConstraints = typeParameterSymbol?.ConstraintTypesNoUseSiteDiagnostics; // https://github.com/dotnet/roslyn/issues/26198 Switch to public API when we will have one.
+                            else if (typeParam.HasNotNullConstraint)
+                            {
+                                builder.Add(new SymbolDisplayPart(SymbolDisplayPartKind.Keyword, null, "notnull"));
+                                needComma = true;
+                            }
 
                             for (int i = 0; i < typeParam.ConstraintTypes.Length; i++)
                             {
@@ -828,15 +839,7 @@ namespace Microsoft.CodeAnalysis.CSharp
                                     AddSpace();
                                 }
 
-                                if (annotatedConstraints.HasValue)
-                                {
-                                    VisitTypeSymbolWithAnnotations(annotatedConstraints.GetValueOrDefault()[i], this.NotFirstVisitor);
-                                }
-                                else
-                                {
-                                    baseType.Accept(this.NotFirstVisitor);
-                                }
-
+                                baseType.Accept(this.NotFirstVisitor);
                                 needComma = true;
                             }
 

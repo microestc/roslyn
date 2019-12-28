@@ -21,6 +21,9 @@ namespace Microsoft.CodeAnalysis.CSharp.UnitTests
             _container = container;
         }
 
+        protected override NamedTypeSymbol WithTupleDataCore(TupleExtraData newData)
+            => throw new NotImplementedException();
+
         public override int Arity
         {
             get
@@ -45,11 +48,11 @@ namespace Microsoft.CodeAnalysis.CSharp.UnitTests
             }
         }
 
-        internal override ImmutableArray<TypeSymbolWithAnnotations> TypeArgumentsNoUseSiteDiagnostics
+        internal override ImmutableArray<TypeWithAnnotations> TypeArgumentsWithAnnotationsNoUseSiteDiagnostics
         {
             get
             {
-                return ImmutableArray.Create<TypeSymbolWithAnnotations>();
+                return ImmutableArray.Create<TypeWithAnnotations>();
             }
         }
 
@@ -189,7 +192,7 @@ namespace Microsoft.CodeAnalysis.CSharp.UnitTests
             }
         }
 
-        internal sealed override bool IsReadOnly
+        public sealed override bool IsReadOnly
         {
             get
             {
@@ -210,6 +213,14 @@ namespace Microsoft.CodeAnalysis.CSharp.UnitTests
             get
             {
                 return false;
+            }
+        }
+
+        public sealed override bool AreLocalsZeroed
+        {
+            get
+            {
+                throw ExceptionUtilities.Unreachable;
             }
         }
 

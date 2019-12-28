@@ -18,8 +18,19 @@ Namespace Microsoft.VisualStudio.LanguageServices.VisualBasic.Options
         Public ReadOnly Property Option_Analysis As String =
             ServicesVSResources.Analysis
 
-        Public ReadOnly Property Option_Enable_full_solution_analysis As String =
-            ServicesVSResources.Enable_full_solution_analysis
+        Public ReadOnly Property Option_Background_analysis_scope As String =
+            ServicesVSResources.Background_analysis_scope_colon
+
+        Public ReadOnly Property Option_Background_Analysis_Scope_Active_File As String =
+            ServicesVSResources.Current_Document
+
+        Public ReadOnly Property Option_Background_Analysis_Scope_Open_Files_And_Projects As String =
+            ServicesVSResources.Open_Documents_and_Projects
+
+        Public ReadOnly Property Option_Background_Analysis_Scope_Full_Solution As String =
+            ServicesVSResources.Entire_Solution
+
+        Public ReadOnly Property Option_use_editorconfig_compatibility_mode As String = ServicesVSResources.Use_editorconfig_compatibility_mode
 
         Public ReadOnly Property Option_DisplayLineSeparators As String
             Get
@@ -214,5 +225,14 @@ Namespace Microsoft.VisualStudio.LanguageServices.VisualBasic.Options
 
         Public ReadOnly Property Option_Highlight_related_components_under_cursor As String =
             ServicesVSResources.Highlight_related_components_under_cursor
+
+        Public ReadOnly Property Option_Show_completion_list As String =
+            ServicesVSResources.Show_completion_list
+
+        Public ReadOnly Property Option_Classifications As String =
+            ServicesVSResources.Classifications
+
+        Public ReadOnly Property Option_Use_enhanced_colors_for_C_and_Basic As String =
+            ServicesVSResources.Use_enhanced_colors_for_C_and_Basic
     End Module
 End Namespace

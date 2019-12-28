@@ -7,6 +7,7 @@ Imports Microsoft.VisualStudio.Shell
 Imports Roslyn.Utilities
 Imports System.IO
 Imports Moq
+Imports Microsoft.VisualStudio.LanguageServices.ProjectSystem
 
 Namespace Microsoft.VisualStudio.LanguageServices.UnitTests.ProjectSystemShim.Framework
     Public NotInheritable Class MockHierarchy
@@ -19,6 +20,10 @@ Namespace Microsoft.VisualStudio.LanguageServices.UnitTests.ProjectSystemShim.Fr
 
         Private _projectName As String
         Private _projectBinPath As String
+        Private _maxSupportedLangVer As String
+        Private _runAnalyzers As String
+        Private _runAnalyzersDuringLiveAnalysis As String
+        Private ReadOnly _projectRefPath As String
         Private ReadOnly _projectCapabilities As String
         Private ReadOnly _projectMock As Mock(Of EnvDTE.Project) = New Mock(Of EnvDTE.Project)(MockBehavior.Strict)
 
@@ -28,9 +33,11 @@ Namespace Microsoft.VisualStudio.LanguageServices.UnitTests.ProjectSystemShim.Fr
         Public Sub New(projectName As String,
                        projectFilePath As String,
                        projectBinPath As String,
+                       projectRefPath As String,
                        projectCapabilities As String)
             _projectName = projectName
             _projectBinPath = projectBinPath
+            _projectRefPath = projectRefPath
             _projectCapabilities = projectCapabilities
             _hierarchyItems.Add(CType(VSConstants.VSITEMID.Root, UInteger), projectFilePath)
         End Sub
@@ -324,9 +331,21 @@ Namespace Microsoft.VisualStudio.LanguageServices.UnitTests.ProjectSystemShim.Fr
             ElseIf pszPropName = "TargetFileName" Then
                 pbstrPropValue = PathUtilities.ChangeExtension(_projectName, "dll")
                 Return VSConstants.S_OK
+            ElseIf pszPropName = "TargetRefPath" Then
+                pbstrPropValue = _projectRefPath
+                Return VSConstants.S_OK
+            ElseIf pszPropName = AdditionalPropertyNames.MaxSupportedLangVersion Then
+                pbstrPropValue = _maxSupportedLangVer
+                Return VSConstants.S_OK
+            ElseIf pszPropName = AdditionalPropertyNames.RunAnalyzers Then
+                pbstrPropValue = _runAnalyzers
+                Return VSConstants.S_OK
+            ElseIf pszPropName = AdditionalPropertyNames.RunAnalyzersDuringLiveAnalysis Then
+                pbstrPropValue = _runAnalyzersDuringLiveAnalysis
+                Return VSConstants.S_OK
             End If
 
-            Throw New NotImplementedException()
+            Throw New NotSupportedException($"{NameOf(MockHierarchy)}.{NameOf(GetPropertyValue)} does not support reading {pszPropName}.")
         End Function
 
         Public Function SetPropertyValue(pszPropName As String, pszConfigName As String, storage As UInteger, pszPropValue As String) As Integer Implements IVsBuildPropertyStorage.SetPropertyValue
@@ -335,6 +354,15 @@ Namespace Microsoft.VisualStudio.LanguageServices.UnitTests.ProjectSystemShim.Fr
                 Return VSConstants.S_OK
             ElseIf pszPropName = "TargetFileName" Then
                 _projectName = PathUtilities.GetFileName(pszPropValue, includeExtension:=False)
+                Return VSConstants.S_OK
+            ElseIf pszPropName = AdditionalPropertyNames.MaxSupportedLangVersion Then
+                _maxSupportedLangVer = pszPropValue
+                Return VSConstants.S_OK
+            ElseIf pszPropName = AdditionalPropertyNames.RunAnalyzers Then
+                _runAnalyzers = pszPropValue
+                Return VSConstants.S_OK
+            ElseIf pszPropName = AdditionalPropertyNames.RunAnalyzersDuringLiveAnalysis Then
+                _runAnalyzersDuringLiveAnalysis = pszPropValue
                 Return VSConstants.S_OK
             End If
 

@@ -53,7 +53,7 @@ namespace Microsoft.CodeAnalysis.CSharp.Symbols.Retargeting
             }
         }
 
-        internal override TypeSymbolWithAnnotations GetFieldType(ConsList<FieldSymbol> fieldsBeingBound)
+        internal override TypeWithAnnotations GetFieldType(ConsList<FieldSymbol> fieldsBeingBound)
         {
             return this.RetargetingTranslator.Retarget(_underlyingField.GetFieldType(fieldsBeingBound), RetargetOptions.RetargetPrimitiveTypesByTypeCode);
         }
@@ -108,6 +108,8 @@ namespace Microsoft.CodeAnalysis.CSharp.Symbols.Retargeting
                 return (object)associated == null ? null : this.RetargetingTranslator.Retarget(associated);
             }
         }
+
+        public override int TupleElementIndex => _underlyingField.TupleElementIndex;
 
         internal override DiagnosticInfo GetUseSiteDiagnostic()
         {

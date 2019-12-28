@@ -13,6 +13,10 @@ Namespace Microsoft.CodeAnalysis.VisualBasic.Execution
     Friend Class VisualBasicOptionsSerializationService
         Inherits AbstractOptionsSerializationService
 
+        <ImportingConstructor>
+        Public Sub New()
+        End Sub
+
         Public Overrides Sub WriteTo(options As CompilationOptions, writer As ObjectWriter, cancellationToken As CancellationToken)
             WriteCompilationOptionsTo(options, writer, cancellationToken)
 
@@ -26,7 +30,7 @@ Namespace Microsoft.CodeAnalysis.VisualBasic.Execution
             writer.WriteBoolean(vbOptions.OptionCompareText)
             writer.WriteBoolean(vbOptions.EmbedVbCoreRuntime)
 
-            ' save parse option for embeded types - My types
+            ' save parse option for embedded types - My types
             writer.WriteBoolean(vbOptions.ParseOptions IsNot Nothing)
             If vbOptions.ParseOptions IsNot Nothing Then
                 WriteTo(vbOptions.ParseOptions, writer, cancellationToken)

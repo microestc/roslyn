@@ -13,8 +13,8 @@ using Microsoft.CodeAnalysis.Editor.Shared.Utilities;
 using Microsoft.CodeAnalysis.Execution;
 using Microsoft.CodeAnalysis.Host.Mef;
 using Microsoft.CodeAnalysis.Remote;
-using Microsoft.CodeAnalysis.Shared.Options;
 using Microsoft.CodeAnalysis.Shared.TestHooks;
+using Microsoft.CodeAnalysis.SolutionCrawler;
 using Microsoft.CodeAnalysis.SymbolSearch;
 using Microsoft.CodeAnalysis.Test.Utilities;
 using Microsoft.VisualStudio.LanguageServices.Remote;
@@ -136,10 +136,10 @@ namespace Roslyn.VisualStudio.Next.UnitTests.Remote
 
             // wait for listener
             var workspaceListener = listenerProvider.GetWaiter(FeatureAttribute.Workspace);
-            await workspaceListener.CreateWaitTask();
+            await workspaceListener.CreateExpeditedWaitTask();
 
             var listener = listenerProvider.GetWaiter(FeatureAttribute.RemoteHostClient);
-            await listener.CreateWaitTask();
+            await listener.CreateExpeditedWaitTask();
 
             // checksum should already exist
             Assert.True(workspace.CurrentSolution.State.TryGetStateChecksums(out var checksums));
@@ -157,7 +157,7 @@ namespace Roslyn.VisualStudio.Next.UnitTests.Remote
             var mock = new MockLogAndProgressService();
             var client = await service.TryGetRemoteHostClientAsync(CancellationToken.None);
 
-            var session = await client.TryCreateKeepAliveSessionAsync(WellKnownServiceHubServices.RemoteSymbolSearchUpdateEngine, mock, CancellationToken.None);
+            var session = await client.TryCreateKeepAliveSessionAsync(WellKnownServiceHubServices.RemoteSymbolSearchUpdateEngine, callbackTarget: mock, CancellationToken.None);
             var result = await session.TryInvokeAsync(nameof(IRemoteSymbolSearchUpdateEngine.UpdateContinuouslyAsync), new object[] { "emptySource", Path.GetTempPath() }, CancellationToken.None);
 
             Assert.True(result);
@@ -185,10 +185,10 @@ namespace Roslyn.VisualStudio.Next.UnitTests.Remote
             });
 
             // create session that stay alive until client alive (ex, SymbolSearchUpdateEngine)
-            var session = await client.TryCreateKeepAliveSessionAsync("Test", CancellationToken.None);
+            var session = await client.TryCreateKeepAliveSessionAsync("Test", callbackTarget: null, CancellationToken.None);
 
             // mimic unfortunate call that happens to be in the middle of communication.
-            var task = session.TryInvokeAsync("TestMethodAsync", SpecializedCollections.EmptyReadOnlyList<object>(), CancellationToken.None);
+            var task = session.TryInvokeAsync("TestMethodAsync", arguments: null, CancellationToken.None);
 
             // make client to go away
             service.Disable();
@@ -235,8 +235,8 @@ namespace Roslyn.VisualStudio.Next.UnitTests.Remote
         {
             workspace = workspace ?? new AdhocWorkspace(TestHostServices.CreateHostServices());
             workspace.Options = workspace.Options.WithChangedOption(RemoteHostOptions.RemoteHostTest, true)
-                                                 .WithChangedOption(ServiceFeatureOnOffOptions.ClosedFileDiagnostic, LanguageNames.CSharp, true)
-                                                 .WithChangedOption(ServiceFeatureOnOffOptions.ClosedFileDiagnostic, LanguageNames.VisualBasic, true);
+                                                 .WithChangedOption(SolutionCrawlerOptions.BackgroundAnalysisScopeOption, LanguageNames.CSharp, BackgroundAnalysisScope.FullSolution)
+                                                 .WithChangedOption(SolutionCrawlerOptions.BackgroundAnalysisScopeOption, LanguageNames.VisualBasic, BackgroundAnalysisScope.FullSolution);
 
             var analyzerService = GetDiagnosticAnalyzerService(hostAnalyzerReferences ?? SpecializedCollections.EmptyEnumerable<AnalyzerReference>());
 
@@ -254,12 +254,12 @@ namespace Roslyn.VisualStudio.Next.UnitTests.Remote
 
         private class TestService : ServiceHubServiceBase
         {
-            public TestService(Stream stream, IServiceProvider serviceProvider) :
-                base(serviceProvider, stream)
+            public TestService(Stream stream, IServiceProvider serviceProvider)
+                : base(serviceProvider, stream)
             {
                 Event = new ManualResetEvent(false);
 
-                Rpc.StartListening();
+                StartService();
             }
 
             public readonly ManualResetEvent Event;

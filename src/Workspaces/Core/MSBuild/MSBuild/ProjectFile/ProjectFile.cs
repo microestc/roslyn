@@ -56,13 +56,15 @@ namespace Microsoft.CodeAnalysis.MSBuild
                 // In this case, we need to iterate through the <TargetFrameworks>, set <TargetFramework> with
                 // each value, and build the project.
 
-                var hasTargetFrameworkProp = _loadedProject.GetProperty(PropertyNames.TargetFramework) != null;
                 var targetFrameworks = targetFrameworksValue.Split(';');
                 var results = ImmutableArray.CreateBuilder<ProjectFileInfo>(targetFrameworks.Length);
 
+                if (!_loadedProject.GlobalProperties.TryGetValue(PropertyNames.TargetFramework, out var initialGlobalTargetFrameworkValue))
+                    initialGlobalTargetFrameworkValue = null;
+
                 foreach (var targetFramework in targetFrameworks)
                 {
-                    _loadedProject.SetProperty(PropertyNames.TargetFramework, targetFramework);
+                    _loadedProject.SetGlobalProperty(PropertyNames.TargetFramework, targetFramework);
                     _loadedProject.ReevaluateIfNecessary();
 
                     var projectFileInfo = await BuildProjectFileInfoAsync(cancellationToken).ConfigureAwait(false);
@@ -70,16 +72,13 @@ namespace Microsoft.CodeAnalysis.MSBuild
                     results.Add(projectFileInfo);
                 }
 
-                // Remove the <TargetFramework> property if it didn't exist in the file before we set it.
-                // Otherwise, set it back to it's original value.
-                if (!hasTargetFrameworkProp)
+                if (initialGlobalTargetFrameworkValue is null)
                 {
-                    var targetFrameworkProp = _loadedProject.GetProperty(PropertyNames.TargetFramework);
-                    _loadedProject.RemoveProperty(targetFrameworkProp);
+                    _loadedProject.RemoveGlobalProperty(PropertyNames.TargetFramework);
                 }
                 else
                 {
-                    _loadedProject.SetProperty(PropertyNames.TargetFramework, targetFrameworkValue);
+                    _loadedProject.SetGlobalProperty(PropertyNames.TargetFramework, initialGlobalTargetFrameworkValue);
                 }
 
                 _loadedProject.ReevaluateIfNecessary();
@@ -138,7 +137,11 @@ namespace Microsoft.CodeAnalysis.MSBuild
                 .ToImmutableArray();
 
             var additionalDocs = project.GetAdditionalFiles()
-                .Select(MakeAdditionalDocumentFileInfo)
+                .Select(MakeNonSourceFileDocumentFileInfo)
+                .ToImmutableArray();
+
+            var analyzerConfigDocs = project.GetEditorConfigFiles()
+                .Select(MakeNonSourceFileDocumentFileInfo)
                 .ToImmutableArray();
 
             return ProjectFileInfo.Create(
@@ -151,6 +154,7 @@ namespace Microsoft.CodeAnalysis.MSBuild
                 commandLineArgs,
                 docs,
                 additionalDocs,
+                analyzerConfigDocs,
                 project.GetProjectReferences().ToImmutableArray(),
                 Log);
         }
@@ -187,7 +191,7 @@ namespace Microsoft.CodeAnalysis.MSBuild
             return new DocumentFileInfo(filePath, logicalPath, isLinked, isGenerated, sourceCodeKind);
         }
 
-        private DocumentFileInfo MakeAdditionalDocumentFileInfo(MSB.Framework.ITaskItem documentItem)
+        private DocumentFileInfo MakeNonSourceFileDocumentFileInfo(MSB.Framework.ITaskItem documentItem)
         {
             var filePath = GetDocumentFilePath(documentItem);
             var logicalPath = GetDocumentLogicalPath(documentItem, _projectDirectory);

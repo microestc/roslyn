@@ -16,8 +16,8 @@ namespace Microsoft.CodeAnalysis.SolutionCrawler
             {
                 private readonly Dictionary<ProjectId, Dictionary<DocumentId, WorkItem>> _documentWorkQueue = new Dictionary<ProjectId, Dictionary<DocumentId, WorkItem>>();
 
-                public AsyncDocumentWorkItemQueue(SolutionCrawlerProgressReporter progressReporter, Workspace workspace) :
-                    base(progressReporter, workspace)
+                public AsyncDocumentWorkItemQueue(SolutionCrawlerProgressReporter progressReporter, Workspace workspace)
+                    : base(progressReporter, workspace)
                 {
                 }
 
@@ -105,7 +105,7 @@ namespace Microsoft.CodeAnalysis.SolutionCrawler
                         Debug.Assert(existingWorkItem.Language == item.Language);
 
                         // replace it
-                        documentMap[key] = existingWorkItem.With(item.InvocationReasons, item.ActiveMember, item.Analyzers, item.IsRetry, item.AsyncToken);
+                        documentMap[key] = existingWorkItem.With(item.InvocationReasons, item.ActiveMember, item.SpecificAnalyzers, item.IsRetry, item.AsyncToken);
                         return false;
                     }
 

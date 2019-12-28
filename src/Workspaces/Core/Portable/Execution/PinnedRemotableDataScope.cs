@@ -1,8 +1,11 @@
 ﻿// Copyright (c) Microsoft.  All Rights Reserved.  Licensed under the Apache License, Version 2.0.  See License.txt in the project root for license information.
 
+#nullable enable
+
 using System;
 using System.Collections.Generic;
 using System.Threading;
+using System.Threading.Tasks;
 using Microsoft.CodeAnalysis.Internal.Log;
 using Microsoft.CodeAnalysis.Serialization;
 using Roslyn.Utilities;
@@ -28,12 +31,20 @@ namespace Microsoft.CodeAnalysis.Execution
         /// can benefit other requests or not
         /// </summary>
         public readonly bool FromPrimaryBranch;
+
+        /// <summary>
+        /// This indicates a Solution.WorkspaceVersion of this solution. remote host engine uses this version
+        /// to decide whether caching this solution will benefit other requests or not
+        /// </summary>
+        public readonly int WorkspaceVersion;
+
         public readonly Checksum SolutionChecksum;
 
-        public PinnedSolutionInfo(int scopeId, bool fromPrimaryBranch, Checksum solutionChecksum)
+        public PinnedSolutionInfo(int scopeId, bool fromPrimaryBranch, int workspaceVersion, Checksum solutionChecksum)
         {
             ScopeId = scopeId;
             FromPrimaryBranch = fromPrimaryBranch;
+            WorkspaceVersion = workspaceVersion;
             SolutionChecksum = solutionChecksum;
         }
     }
@@ -64,6 +75,7 @@ namespace Microsoft.CodeAnalysis.Execution
             SolutionInfo = new PinnedSolutionInfo(
                 Interlocked.Increment(ref s_scopeId),
                 _storage.SolutionState.BranchId == Workspace.PrimaryBranchId,
+                _storage.SolutionState.WorkspaceVersion,
                 solutionChecksum);
 
             _storages.RegisterSnapshot(this, storage);
@@ -83,19 +95,19 @@ namespace Microsoft.CodeAnalysis.Execution
             _storage.AddAdditionalAsset(asset);
         }
 
-        public RemotableData GetRemotableData(Checksum checksum, CancellationToken cancellationToken)
+        public async ValueTask<RemotableData?> GetRemotableDataAsync(Checksum checksum, CancellationToken cancellationToken)
         {
             using (Logger.LogBlock(FunctionId.PinnedRemotableDataScope_GetRemotableData, Checksum.GetChecksumLogInfo, checksum, cancellationToken))
             {
-                return _storages.GetRemotableData(SolutionInfo.ScopeId, checksum, cancellationToken);
+                return await _storages.GetRemotableDataAsync(SolutionInfo.ScopeId, checksum, cancellationToken).ConfigureAwait(false);
             }
         }
 
-        public IReadOnlyDictionary<Checksum, RemotableData> GetRemotableData(IEnumerable<Checksum> checksums, CancellationToken cancellationToken)
+        public async ValueTask<IReadOnlyDictionary<Checksum, RemotableData>?> GetRemotableDataAsync(IEnumerable<Checksum> checksums, CancellationToken cancellationToken)
         {
             using (Logger.LogBlock(FunctionId.PinnedRemotableDataScope_GetRemotableData, Checksum.GetChecksumsLogInfo, checksums, cancellationToken))
             {
-                return _storages.GetRemotableData(SolutionInfo.ScopeId, checksums, cancellationToken);
+                return await _storages.GetRemotableDataAsync(SolutionInfo.ScopeId, checksums, cancellationToken).ConfigureAwait(false);
             }
         }
 

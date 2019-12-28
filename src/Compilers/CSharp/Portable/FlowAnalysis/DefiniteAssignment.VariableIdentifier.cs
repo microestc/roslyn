@@ -7,18 +7,33 @@ using Roslyn.Utilities;
 
 namespace Microsoft.CodeAnalysis.CSharp
 {
-    internal partial class LocalDataFlowPass<TLocalState>
+    internal partial class LocalDataFlowPass<TLocalState, TLocalFunctionState>
     {
         internal readonly struct VariableIdentifier : IEquatable<VariableIdentifier>
         {
             public readonly Symbol Symbol;
+            /// <summary>
+            /// Indicates whether this variable is nested inside another tracked variable.
+            /// For instance, if a field `x` of a struct is a tracked variable, the symbol is not sufficient
+            /// to uniquely determine which field is being tracked. The containing slot(s) would
+            /// identify which tracked variable the field `x` is part of.
+            /// </summary>
             public readonly int ContainingSlot;
 
             public VariableIdentifier(Symbol symbol, int containingSlot = 0)
             {
-                Debug.Assert(symbol.Kind == SymbolKind.Local || symbol.Kind == SymbolKind.Field || symbol.Kind == SymbolKind.Parameter ||
-                    (symbol as MethodSymbol)?.MethodKind == MethodKind.LocalFunction ||
-                    symbol.Kind == SymbolKind.Property || symbol.Kind == SymbolKind.Event);
+                Debug.Assert(containingSlot >= 0);
+                Debug.Assert(symbol.Kind switch
+                {
+                    SymbolKind.Local => true,
+                    SymbolKind.Parameter => true,
+                    SymbolKind.Field => true,
+                    SymbolKind.Property => true,
+                    SymbolKind.Event => true,
+                    SymbolKind.ErrorType => true,
+                    SymbolKind.Method when symbol is MethodSymbol m && m.MethodKind == MethodKind.LocalFunction => true,
+                    _ => false
+                });
                 Symbol = symbol;
                 ContainingSlot = containingSlot;
             }
@@ -65,7 +80,7 @@ namespace Microsoft.CodeAnalysis.CSharp
                     return true;
                 }
 
-                return Symbol.OriginalDefinition.Equals(other.Symbol.OriginalDefinition);
+                return Symbol.OriginalDefinition.Equals(other.Symbol.OriginalDefinition, SymbolEqualityComparer.ConsiderEverything.CompareKind);
             }
 
             public override bool Equals(object obj)

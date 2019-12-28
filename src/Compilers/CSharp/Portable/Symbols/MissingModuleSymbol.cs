@@ -103,7 +103,7 @@ namespace Microsoft.CodeAnalysis.CSharp.Symbols
             return assembly.GetHashCode();
         }
 
-        public override bool Equals(object obj)
+        public override bool Equals(Symbol obj, TypeCompareKind compareKind)
         {
             if (ReferenceEquals(this, obj))
             {
@@ -112,7 +112,7 @@ namespace Microsoft.CodeAnalysis.CSharp.Symbols
 
             MissingModuleSymbol other = obj as MissingModuleSymbol;
 
-            return (object)other != null && assembly.Equals(other.assembly);
+            return (object)other != null && assembly.Equals(other.assembly, compareKind);
         }
 
         public override ImmutableArray<Location> Locations
@@ -185,6 +185,11 @@ namespace Microsoft.CodeAnalysis.CSharp.Symbols
         }
 
         public override ModuleMetadata GetMetadata() => null;
+
+        public sealed override bool AreLocalsZeroed
+        {
+            get { throw ExceptionUtilities.Unreachable; }
+        }
     }
 
     internal sealed class MissingModuleSymbolWithName : MissingModuleSymbol
@@ -212,7 +217,7 @@ namespace Microsoft.CodeAnalysis.CSharp.Symbols
             return Hash.Combine(assembly.GetHashCode(), StringComparer.OrdinalIgnoreCase.GetHashCode(_name));
         }
 
-        public override bool Equals(object obj)
+        public override bool Equals(Symbol obj, TypeCompareKind compareKind)
         {
             if (ReferenceEquals(this, obj))
             {
@@ -221,7 +226,7 @@ namespace Microsoft.CodeAnalysis.CSharp.Symbols
 
             MissingModuleSymbolWithName other = obj as MissingModuleSymbolWithName;
 
-            return (object)other != null && assembly.Equals(other.assembly) && string.Equals(_name, other._name, StringComparison.OrdinalIgnoreCase);
+            return (object)other != null && assembly.Equals(other.assembly, compareKind) && string.Equals(_name, other._name, StringComparison.OrdinalIgnoreCase);
         }
     }
 }

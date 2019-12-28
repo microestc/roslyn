@@ -1,10 +1,13 @@
 ﻿// Copyright (c) Microsoft.  All Rights Reserved.  Licensed under the Apache License, Version 2.0.  See License.txt in the project root for license information.
 
+#nullable enable
+
 using System;
 using System.Collections.Generic;
 using System.Collections.Immutable;
 using System.Composition;
 using System.Linq;
+using System.Runtime.CompilerServices;
 using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.CodeAnalysis.CodeActions;
@@ -56,7 +59,7 @@ namespace Microsoft.CodeAnalysis.CodeRefactorings
 
         private IEnumerable<CodeRefactoringProvider> GetProviders(Document document)
         {
-            if (this.LanguageToProvidersMap.TryGetValue(document.Project.Language, out var lazyProviders))
+            if (LanguageToProvidersMap.TryGetValue(document.Project.Language, out var lazyProviders))
             {
                 return lazyProviders.Value;
             }
@@ -71,14 +74,14 @@ namespace Microsoft.CodeAnalysis.CodeRefactorings
             TextSpan state,
             CancellationToken cancellationToken)
         {
-            var extensionManager = document.Project.Solution.Workspace.Services.GetService<IExtensionManager>();
+            var extensionManager = document.Project.Solution.Workspace.Services.GetRequiredService<IExtensionManager>();
 
-            foreach (var provider in this.GetProviders(document))
+            foreach (var provider in GetProviders(document))
             {
                 cancellationToken.ThrowIfCancellationRequested();
 
                 var refactoring = await GetRefactoringFromProviderAsync(
-                    document, state, provider, extensionManager, cancellationToken).ConfigureAwait(false);
+                    document, state, provider, extensionManager, isBlocking: false, cancellationToken).ConfigureAwait(false);
 
                 if (refactoring != null)
                 {
@@ -89,20 +92,44 @@ namespace Microsoft.CodeAnalysis.CodeRefactorings
             return false;
         }
 
+        public Task<ImmutableArray<CodeRefactoring>> GetRefactoringsAsync(
+            Document document,
+            TextSpan state,
+            CancellationToken cancellationToken)
+            => GetRefactoringsAsync(document, state, isBlocking: false, cancellationToken);
+
+        public Task<ImmutableArray<CodeRefactoring>> GetRefactoringsAsync(
+            Document document,
+            TextSpan state,
+            bool isBlocking,
+            CancellationToken cancellationToken)
+            => GetRefactoringsAsync(document, state, isBlocking, addOperationScope: _ => null, cancellationToken);
+
         public async Task<ImmutableArray<CodeRefactoring>> GetRefactoringsAsync(
             Document document,
             TextSpan state,
+            bool isBlocking,
+            Func<string, IDisposable?> addOperationScope,
             CancellationToken cancellationToken)
         {
             using (Logger.LogBlock(FunctionId.Refactoring_CodeRefactoringService_GetRefactoringsAsync, cancellationToken))
             {
-                var extensionManager = document.Project.Solution.Workspace.Services.GetService<IExtensionManager>();
-                var tasks = new List<Task<CodeRefactoring>>();
+                var extensionManager = document.Project.Solution.Workspace.Services.GetRequiredService<IExtensionManager>();
+                var tasks = new List<Task<CodeRefactoring?>>();
 
-                foreach (var provider in this.GetProviders(document))
+                foreach (var provider in GetProviders(document))
                 {
                     tasks.Add(Task.Run(
-                        () => GetRefactoringFromProviderAsync(document, state, provider, extensionManager, cancellationToken), cancellationToken));
+                        () =>
+                        {
+                            var providerName = provider.GetType().Name;
+                            using (addOperationScope(providerName))
+                            using (RoslynEventSource.LogInformationalBlock(FunctionId.Refactoring_CodeRefactoringService_GetRefactoringsAsync, providerName, cancellationToken))
+                            {
+                                return GetRefactoringFromProviderAsync(document, state, provider, extensionManager, isBlocking, cancellationToken);
+                            }
+                        },
+                        cancellationToken));
                 }
 
                 var results = await Task.WhenAll(tasks).ConfigureAwait(false);
@@ -110,11 +137,12 @@ namespace Microsoft.CodeAnalysis.CodeRefactorings
             }
         }
 
-        private async Task<CodeRefactoring> GetRefactoringFromProviderAsync(
+        private async Task<CodeRefactoring?> GetRefactoringFromProviderAsync(
             Document document,
             TextSpan state,
             CodeRefactoringProvider provider,
             IExtensionManager extensionManager,
+            bool isBlocking,
             CancellationToken cancellationToken)
         {
             cancellationToken.ThrowIfCancellationRequested();
@@ -125,18 +153,19 @@ namespace Microsoft.CodeAnalysis.CodeRefactorings
 
             try
             {
-                var actions = ArrayBuilder<CodeAction>.GetInstance();
+                var actions = ArrayBuilder<(CodeAction action, TextSpan? applicableToSpan)>.GetInstance();
                 var context = new CodeRefactoringContext(document, state,
 
                     // TODO: Can we share code between similar lambdas that we pass to this API in BatchFixAllProvider.cs, CodeFixService.cs and CodeRefactoringService.cs?
-                    a =>
+                    (action, applicableToSpan) =>
                     {
                         // Serialize access for thread safety - we don't know what thread the refactoring provider will call this delegate from.
                         lock (actions)
                         {
-                            actions.Add(a);
+                            actions.Add((action, applicableToSpan));
                         }
                     },
+                    isBlocking,
                     cancellationToken);
 
                 var task = provider.ComputeRefactoringsAsync(context) ?? Task.CompletedTask;

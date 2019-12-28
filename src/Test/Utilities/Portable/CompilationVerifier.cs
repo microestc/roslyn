@@ -30,11 +30,11 @@ namespace Microsoft.CodeAnalysis.Test.Utilities
         public ImmutableArray<byte> EmittedAssemblyData;
         public ImmutableArray<byte> EmittedAssemblyPdb;
 
-        private readonly Func<IModuleSymbol, CompilationTestData.MethodData, IReadOnlyDictionary<int, string>, string> _visualizeRealIL;
+        private readonly Func<IModuleSymbol, CompilationTestData.MethodData, IReadOnlyDictionary<int, string>, bool, string> _visualizeRealIL;
 
         internal CompilationVerifier(
             Compilation compilation,
-            Func<IModuleSymbol, CompilationTestData.MethodData, IReadOnlyDictionary<int, string>, string> visualizeRealIL = null,
+            Func<IModuleSymbol, CompilationTestData.MethodData, IReadOnlyDictionary<int, string>, bool, string> visualizeRealIL = null,
             IEnumerable<ModuleData> dependencies = null)
         {
             _compilation = compilation;
@@ -152,6 +152,15 @@ namespace Microsoft.CodeAnalysis.Test.Utilities
             }
         }
 
+        /// <summary>
+		/// Asserts that the emitted IL for a type is the same as the expected IL.
+		/// Many core library types are in different assemblies on .Net Framework, and .Net Core.
+		/// Therefore this test is likely to fail unless you  only run it only only on one of these frameworks,
+		/// or you run it on both, but provide a different expected output string for each.
+		/// See <see cref="ExecutionConditionUtil"/>.
+		/// </summary>
+		/// <param name="typeName">The non-fully-qualified name of the type</param>
+		/// <param name="expected">The expected IL</param>
         public void VerifyTypeIL(string typeName, string expected)
         {
             var output = new ICSharpCode.Decompiler.PlainTextOutput();
@@ -185,25 +194,24 @@ namespace Microsoft.CodeAnalysis.Test.Utilities
 
         public void Emit(string expectedOutput, int? expectedReturnCode, string[] args, IEnumerable<ResourceDescription> manifestResources, EmitOptions emitOptions, Verification peVerify, SignatureDescription[] expectedSignatures)
         {
-            using (var testEnvironment = RuntimeEnvironmentFactory.Create(_dependencies))
+            using var testEnvironment = RuntimeEnvironmentFactory.Create(_dependencies);
+
+            string mainModuleName = Emit(testEnvironment, manifestResources, emitOptions);
+            _allModuleData = testEnvironment.GetAllModuleData();
+            testEnvironment.Verify(peVerify);
+
+            if (expectedSignatures != null)
             {
-                string mainModuleName = Emit(testEnvironment, manifestResources, emitOptions);
-                _allModuleData = testEnvironment.GetAllModuleData();
-                testEnvironment.Verify(peVerify);
+                MetadataSignatureUnitTestHelper.VerifyMemberSignatures(testEnvironment, expectedSignatures);
+            }
 
-                if (expectedSignatures != null)
+            if (expectedOutput != null || expectedReturnCode != null)
+            {
+                var returnCode = testEnvironment.Execute(mainModuleName, args, expectedOutput);
+
+                if (expectedReturnCode is int exCode)
                 {
-                    MetadataSignatureUnitTestHelper.VerifyMemberSignatures(testEnvironment, expectedSignatures);
-                }
-
-                if (expectedOutput != null || expectedReturnCode != null)
-                {
-                    var returnCode = testEnvironment.Execute(mainModuleName, args, expectedOutput);
-
-                    if (expectedReturnCode is int exCode)
-                    {
-                        Assert.Equal(exCode, returnCode);
-                    }
+                    Assert.Equal(exCode, returnCode);
                 }
             }
         }
@@ -342,7 +350,7 @@ namespace Microsoft.CodeAnalysis.Test.Utilities
                 }
 
 
-                return _visualizeRealIL(_lazyModuleSymbol, methodData, markers);
+                return _visualizeRealIL(_lazyModuleSymbol, methodData, markers, _testData.Module.GetMethodBody(methodData.Method).AreLocalsZeroed);
             }
 
             return null;
@@ -413,14 +421,14 @@ namespace Microsoft.CodeAnalysis.Test.Utilities
         /// </summary>
         public void VerifySynthesizedFields(string containingTypeName, params string[] expectedFields)
         {
-            var types = TestData.Module.GetSynthesizedMembers();
+            var types = TestData.Module.GetAllSynthesizedMembers();
             Assert.Contains(types.Keys, t => containingTypeName == t.ToString());
-            var members = TestData.Module.GetSynthesizedMembers()
+            var members = TestData.Module.GetAllSynthesizedMembers()
                 .Where(e => e.Key.ToString() == containingTypeName)
                 .Single()
                 .Value
-                .OfType<IFieldSymbol>()
-                .Select(f => $"{f.Type.ToString()} {f.Name}")
+                .Where(s => s.Kind == SymbolKind.Field)
+                .Select(f => $"{((IFieldSymbol)f.GetISymbol()).Type.ToString()} {f.Name}")
                 .ToList();
             AssertEx.SetEqual(expectedFields, members);
         }

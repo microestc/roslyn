@@ -1,5 +1,7 @@
 ﻿// Copyright (c) Microsoft.  All Rights Reserved.  Licensed under the Apache License, Version 2.0.  See License.txt in the project root for license information.
 
+#nullable enable
+
 using System;
 using System.Collections.Generic;
 using System.ComponentModel.Composition;
@@ -60,7 +62,9 @@ namespace Microsoft.VisualStudio.LanguageServices.Implementation
         private void RaiseAnalyzerChangedWarning(ProjectId projectId, string analyzerPath)
         {
             var messageArguments = new string[] { analyzerPath };
-            if (DiagnosticData.TryCreate(_analyzerChangedRule, messageArguments, projectId, _workspace, out var diagnostic))
+
+            var project = _workspace.CurrentSolution.GetProject(projectId);
+            if (project != null && DiagnosticData.TryCreate(_analyzerChangedRule, messageArguments, project, out var diagnostic))
             {
                 _updateSource.UpdateDiagnosticsForProject(projectId, Tuple.Create(s_analyzerChangedErrorId, analyzerPath), SpecializedCollections.SingletonEnumerable(diagnostic));
             }
@@ -70,8 +74,8 @@ namespace Microsoft.VisualStudio.LanguageServices.Implementation
         {
             try
             {
-                DateTime creationTimeUtc = File.GetCreationTimeUtc(fullPath);
-                DateTime writeTimeUtc = File.GetLastWriteTimeUtc(fullPath);
+                var creationTimeUtc = File.GetCreationTimeUtc(fullPath);
+                var writeTimeUtc = File.GetLastWriteTimeUtc(fullPath);
 
                 return writeTimeUtc > creationTimeUtc ? writeTimeUtc : creationTimeUtc;
             }
@@ -98,11 +102,9 @@ namespace Microsoft.VisualStudio.LanguageServices.Implementation
                     _fileChangeTrackers.Add(filePath, tracker);
                 }
 
-                DateTime assemblyUpdatedTime;
-
-                if (_assemblyUpdatedTimesUtc.TryGetValue(filePath, out assemblyUpdatedTime))
+                if (_assemblyUpdatedTimesUtc.TryGetValue(filePath, out var assemblyUpdatedTime))
                 {
-                    DateTime? currentFileUpdateTime = GetLastUpdateTimeUtc(filePath);
+                    var currentFileUpdateTime = GetLastUpdateTimeUtc(filePath);
 
                     if (currentFileUpdateTime != null)
                     {
@@ -124,7 +126,7 @@ namespace Microsoft.VisualStudio.LanguageServices.Implementation
                     // If the file watcher is in place, then nothing further to do. Otherwise we'll add the update time to the map for future checking
                     if (!tracker.PreviousCallToStartFileChangeHasAsynchronouslyCompleted)
                     {
-                        DateTime? currentFileUpdateTime = GetLastUpdateTimeUtc(filePath);
+                        var currentFileUpdateTime = GetLastUpdateTimeUtc(filePath);
 
                         if (currentFileUpdateTime != null)
                         {
@@ -137,7 +139,7 @@ namespace Microsoft.VisualStudio.LanguageServices.Implementation
 
         private void Tracker_UpdatedOnDisk(object sender, EventArgs e)
         {
-            FileChangeTracker tracker = (FileChangeTracker)sender;
+            var tracker = (FileChangeTracker)sender;
             var filePath = tracker.FilePath;
 
             lock (_guard)

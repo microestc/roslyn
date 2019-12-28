@@ -14,7 +14,7 @@ namespace Microsoft.CodeAnalysis.CSharp.UsePatternMatching
         {
             private readonly SemanticModel _semanticModel;
             private readonly ILocalSymbol _localSymbol;
-            private readonly BinaryExpressionSyntax _comparison;
+            private readonly ExpressionSyntax _comparison;
             private readonly ExpressionSyntax _operand;
             private readonly SyntaxNode _localStatement;
             private readonly SyntaxNode _enclosingBlock;
@@ -23,7 +23,7 @@ namespace Microsoft.CodeAnalysis.CSharp.UsePatternMatching
             private Analyzer(
                 SemanticModel semanticModel,
                 ILocalSymbol localSymbol,
-                BinaryExpressionSyntax comparison,
+                ExpressionSyntax comparison,
                 ExpressionSyntax operand,
                 SyntaxNode localStatement,
                 SyntaxNode enclosingBlock,
@@ -48,7 +48,7 @@ namespace Microsoft.CodeAnalysis.CSharp.UsePatternMatching
             public static bool CanSafelyConvertToPatternMatching(
                 SemanticModel semanticModel,
                 ILocalSymbol localSymbol,
-                BinaryExpressionSyntax comparison,
+                ExpressionSyntax comparison,
                 ExpressionSyntax operand,
                 SyntaxNode localStatement,
                 SyntaxNode enclosingBlock,
@@ -90,7 +90,7 @@ namespace Microsoft.CodeAnalysis.CSharp.UsePatternMatching
                 // Keep track of whether the pattern variable is definitely assigned when false/true.
                 // We start by the null-check itself, if it's compared with '==', the pattern variable
                 // will be definitely assigned when false, because we wrap the is-operator in a !-operator.
-                var defAssignedWhenTrue = _comparison.Kind() == SyntaxKind.NotEqualsExpression;
+                var defAssignedWhenTrue = _comparison.IsKind(SyntaxKind.NotEqualsExpression, SyntaxKind.IsExpression);
 
                 foreach (var current in _comparison.Ancestors())
                 {
@@ -215,7 +215,7 @@ namespace Microsoft.CodeAnalysis.CSharp.UsePatternMatching
                     {
                         case ExpressionSyntax expression:
                             // If we reached here, it means we have a sub-expression that
-                            // does not garantee definite assignment. We should make sure that
+                            // does not guarantee definite assignment. We should make sure that
                             // the pattern variable is not used outside of the expression boundaries.
                             return CheckExpression(expression);
 

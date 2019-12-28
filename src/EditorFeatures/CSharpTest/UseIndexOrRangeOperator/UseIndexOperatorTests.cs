@@ -7,6 +7,7 @@ using Microsoft.CodeAnalysis.CSharp.UseIndexOrRangeOperator;
 using Microsoft.CodeAnalysis.Diagnostics;
 using Microsoft.CodeAnalysis.Editor.CSharp.UnitTests.Diagnostics;
 using Microsoft.CodeAnalysis.Test.Utilities;
+using Roslyn.Test.Utilities;
 using Xunit;
 
 namespace Microsoft.CodeAnalysis.Editor.CSharp.UnitTests.UseIndexOrRangeOperator
@@ -63,6 +64,7 @@ class C
         {
             await TestAsync(
 @"
+namespace System { public struct Index { } }
 class C
 {
     void Goo(string s)
@@ -71,6 +73,7 @@ class C
     }
 }",
 @"
+namespace System { public struct Index { } }
 class C
 {
     void Goo(string s)
@@ -85,6 +88,7 @@ class C
         {
             await TestAsync(
 @"
+namespace System { public struct Index { } }
 class C
 {
     void Goo(string s)
@@ -93,6 +97,7 @@ class C
     }
 }",
 @"
+namespace System { public struct Index { } }
 class C
 {
     void Goo(string s)
@@ -109,6 +114,7 @@ class C
 @"
 using System.Linq;
 
+namespace System { public struct Index { } }
 class C
 {
     void Goo(string[] ss)
@@ -119,6 +125,7 @@ class C
 @"
 using System.Linq;
 
+namespace System { public struct Index { } }
 class C
 {
     void Goo(string[] ss)
@@ -257,15 +264,25 @@ class C
         [Fact, Trait(Traits.Feature, Traits.Features.CodeActionsUseIndexOperator)]
         public async Task TestUserDefinedTypeWithNoIndexIndexer()
         {
-            await TestMissingAsync(
+            await TestInRegularAndScript1Async(
 @"
 namespace System { public struct Index { } }
-struct S { public int Length { get; } public int this[int i] { get; } }
+struct S { public int Count { get; } public int this[int i] { get; } }
 class C
 {
     void Goo(S s)
     {
         var v = s[[||]s.Count - 2];
+    }
+}",
+@"
+namespace System { public struct Index { } }
+struct S { public int Count { get; } public int this[int i] { get; } }
+class C
+{
+    void Goo(S s)
+    {
+        var v = s[^2];
     }
 }", parameters: s_testParameters);
         }
@@ -328,11 +345,27 @@ class C
 }", parameters: s_testParameters);
         }
 
+        [WorkItem(36909, "https://github.com/dotnet/roslyn/issues/36909")]
+        [Fact, Trait(Traits.Feature, Traits.Features.CodeActionsUseIndexOperator)]
+        public async Task TestMissingWithNoSystemIndex()
+        {
+            await TestMissingInRegularAndScriptAsync(
+@"
+class C
+{
+    void Goo(string[] s)
+    {
+        var v = s[[||]s.Length - 1];
+    }
+}", new TestParameters(parseOptions: s_parseOptions));
+        }
+
         [Fact, Trait(Traits.Feature, Traits.Features.CodeActionsUseIndexOperator)]
         public async Task TestArray()
         {
             await TestAsync(
 @"
+namespace System { public struct Index { } }
 class C
 {
     void Goo(string[] s)
@@ -341,6 +374,7 @@ class C
     }
 }",
 @"
+namespace System { public struct Index { } }
 class C
 {
     void Goo(string[] s)
@@ -355,6 +389,7 @@ class C
         {
             await TestAsync(
 @"
+namespace System { public struct Index { } }
 class C
 {
     void Goo(string s)
@@ -364,6 +399,7 @@ class C
     }
 }",
 @"
+namespace System { public struct Index { } }
 class C
 {
     void Goo(string s)
@@ -379,6 +415,7 @@ class C
         {
             await TestAsync(
 @"
+namespace System { public struct Index { } }
 class C
 {
     void Goo(string s)
@@ -388,6 +425,7 @@ class C
     }
 }",
 @"
+namespace System { public struct Index { } }
 class C
 {
     void Goo(string s)
@@ -403,6 +441,7 @@ class C
         {
             await TestAsync(
 @"
+namespace System { public struct Index { } }
 class C
 {
     void Goo(string[] s)
@@ -411,6 +450,7 @@ class C
     }
 }",
 @"
+namespace System { public struct Index { } }
 class C
 {
     void Goo(string[] s)
@@ -425,6 +465,7 @@ class C
         {
             await TestAsync(
 @"
+namespace System { public struct Index { } }
 class C
 {
     void Goo(string[] s)
@@ -433,6 +474,7 @@ class C
     }
 }",
 @"
+namespace System { public struct Index { } }
 class C
 {
     void Goo(string[] s)
@@ -440,6 +482,74 @@ class C
         var v1 = s[^2][^1];
     }
 }", parseOptions: s_parseOptions);
+        }
+
+        [Fact, Trait(Traits.Feature, Traits.Features.CodeActionsUseIndexOperator)]
+        public async Task TestSimple_NoIndexIndexer_SupportsIntIndexer()
+        {
+            await TestAsync(
+@"
+using System.Collections.Generic;
+namespace System { public struct Index { } }
+class C
+{
+    void Goo(List<int> s)
+    {
+        var v = s[[||]s.Count - 1];
+    }
+}",
+@"
+using System.Collections.Generic;
+namespace System { public struct Index { } }
+class C
+{
+    void Goo(List<int> s)
+    {
+        var v = s[^1];
+    }
+}", parseOptions: s_parseOptions);
+        }
+
+        [Fact, Trait(Traits.Feature, Traits.Features.CodeActionsUseIndexOperator)]
+        public async Task TestSimple_NoIndexIndexer_SupportsIntIndexer_Set()
+        {
+            await TestAsync(
+@"
+using System.Collections.Generic;
+namespace System { public struct Index { } }
+class C
+{
+    void Goo(List<int> s)
+    {
+        s[[||]s.Count - 1] = 1;
+    }
+}",
+@"
+using System.Collections.Generic;
+namespace System { public struct Index { } }
+class C
+{
+    void Goo(List<int> s)
+    {
+        s[^1] = 1;
+    }
+}", parseOptions: s_parseOptions);
+        }
+
+        [Fact, Trait(Traits.Feature, Traits.Features.CodeActionsUseIndexOperator)]
+        public async Task NotOnConstructedIndexer()
+        {
+            await TestMissingInRegularAndScriptAsync(
+@"
+using System.Collections.Generic;
+namespace System { public struct Index { } }
+class C
+{
+    void Goo(Dictionary<int, string> s)
+    {
+        var v = s[[||]s.Count - 1];
+    }
+}", new TestParameters(parseOptions: s_parseOptions));
         }
     }
 }

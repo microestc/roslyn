@@ -16,7 +16,10 @@ namespace Microsoft.CodeAnalysis.CSharp
                     path: "",
                     options: options,
                     root: root,
-                    directives: Syntax.InternalSyntax.DirectiveStack.Empty)
+                    directives: Syntax.InternalSyntax.DirectiveStack.Empty,
+                    diagnosticOptions: null,
+                    isGeneratedCode: null,
+                    cloneRoot: true)
             {
             }
 

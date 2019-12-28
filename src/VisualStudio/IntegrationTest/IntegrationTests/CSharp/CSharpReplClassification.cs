@@ -4,18 +4,19 @@ using Microsoft.VisualStudio.IntegrationTest.Utilities;
 using Microsoft.VisualStudio.IntegrationTest.Utilities.Input;
 using Roslyn.Test.Utilities;
 using Xunit;
+using Xunit.Abstractions;
 
 namespace Roslyn.VisualStudio.IntegrationTests.CSharp
 {
     [Collection(nameof(SharedIntegrationHostFixture))]
     public class CSharpReplClassification : AbstractInteractiveWindowTest
     {
-        public CSharpReplClassification(VisualStudioInstanceFactory instanceFactory)
-            : base(instanceFactory)
+        public CSharpReplClassification(VisualStudioInstanceFactory instanceFactory, ITestOutputHelper testOutputHelper)
+            : base(instanceFactory, testOutputHelper)
         {
         }
 
-        [WpfFact]
+        [WpfFact(Skip = "https://github.com/dotnet/roslyn/issues/40160")]
         public void VerifyColorOfSomeTokens()
         {
             VisualStudio.InteractiveWindow.InsertCode(@"using System.Console;

@@ -21,9 +21,19 @@ namespace Microsoft.CodeAnalysis.CSharp.CodeFixes.DeclareAsNullable
     [ExportCodeFixProvider(LanguageNames.CSharp, Name = PredefinedCodeFixProviderNames.DeclareAsNullable), Shared]
     internal class CSharpDeclareAsNullableCodeFixProvider : SyntaxEditorBasedCodeFixProvider
     {
+        private const string IsConditionalOperatorEquivalenceKey = nameof(IsConditionalOperatorEquivalenceKey);
+        private const string IsOtherEquivalenceKey = nameof(IsOtherEquivalenceKey);
+
+        [ImportingConstructor]
+        public CSharpDeclareAsNullableCodeFixProvider()
+        {
+        }
+
         // warning CS8603: Possible null reference return.
         // warning CS8600: Converting null literal or possible null value to non-nullable type.
         public sealed override ImmutableArray<string> FixableDiagnosticIds => ImmutableArray.Create("CS8603", "CS8600");
+
+        internal sealed override CodeFixCategory CodeFixCategory => CodeFixCategory.Compile;
 
         public override async Task RegisterCodeFixesAsync(CodeFixContext context)
         {
@@ -38,30 +48,40 @@ namespace Microsoft.CodeAnalysis.CSharp.CodeFixes.DeclareAsNullable
             }
 
             context.RegisterCodeFix(new MyCodeAction(
-                c => FixAsync(context.Document, diagnostic, c)),
+                c => FixAsync(context.Document, diagnostic, c),
+                GetEquivalenceKey(node)),
                 context.Diagnostics);
+        }
+
+        private string GetEquivalenceKey(SyntaxNode node)
+        {
+            return node.IsKind(SyntaxKind.ConditionalAccessExpression) ? IsConditionalOperatorEquivalenceKey : IsOtherEquivalenceKey;
         }
 
         protected override Task FixAllAsync(
             Document document, ImmutableArray<Diagnostic> diagnostics,
             SyntaxEditor editor, CancellationToken cancellationToken)
         {
-            var root = editor.OriginalRoot;
-
             // a method can have multiple `return null;` statements, but we should only fix its return type once
             var alreadyHandled = PooledHashSet<TypeSyntax>.GetInstance();
 
             foreach (var diagnostic in diagnostics)
             {
                 var node = diagnostic.Location.FindNode(getInnermostNodeForTie: true, cancellationToken);
-                MakeDeclarationNullable(document, editor, node, alreadyHandled);
+                MakeDeclarationNullable(editor, node, alreadyHandled);
             }
 
             alreadyHandled.Free();
             return Task.CompletedTask;
         }
 
-        private static void MakeDeclarationNullable(Document document, SyntaxEditor editor, SyntaxNode node, HashSet<TypeSyntax> alreadyHandled)
+        protected override bool IncludeDiagnosticDuringFixAll(FixAllState state, Diagnostic diagnostic, CancellationToken cancellationToken)
+        {
+            var node = diagnostic.Location.FindNode(getInnermostNodeForTie: true, cancellationToken);
+            return state.CodeActionEquivalenceKey == GetEquivalenceKey(node);
+        }
+
+        private static void MakeDeclarationNullable(SyntaxEditor editor, SyntaxNode node, HashSet<TypeSyntax> alreadyHandled)
         {
             var declarationTypeToFix = TryGetDeclarationTypeToFix(node);
             if (declarationTypeToFix != null && alreadyHandled.Add(declarationTypeToFix))
@@ -73,7 +93,7 @@ namespace Microsoft.CodeAnalysis.CSharp.CodeFixes.DeclareAsNullable
 
         private static TypeSyntax TryGetDeclarationTypeToFix(SyntaxNode node)
         {
-            if (!node.IsKind(SyntaxKind.NullLiteralExpression, SyntaxKind.AsExpression))
+            if (!IsExpressionSupported(node))
             {
                 return null;
             }
@@ -92,28 +112,27 @@ namespace Microsoft.CodeAnalysis.CSharp.CodeFixes.DeclareAsNullable
 
                 var onYield = node.IsParentKind(SyntaxKind.YieldReturnStatement);
 
-                switch (containingMember)
+                return containingMember switch
                 {
-                    case MethodDeclarationSyntax method:
+                    MethodDeclarationSyntax method =>
                         // string M() { return null; }
                         // async Task<string> M() { return null; }
                         // IEnumerable<string> M() { yield return null; }
-                        return TryGetReturnType(method.ReturnType, method.Modifiers, onYield);
+                        TryGetReturnType(method.ReturnType, method.Modifiers, onYield),
 
-                    case LocalFunctionStatementSyntax localFunction:
+                    LocalFunctionStatementSyntax localFunction =>
                         // string local() { return null; }
                         // async Task<string> local() { return null; }
                         // IEnumerable<string> local() { yield return null; }
-                        return TryGetReturnType(localFunction.ReturnType, localFunction.Modifiers, onYield);
+                        TryGetReturnType(localFunction.ReturnType, localFunction.Modifiers, onYield),
 
-                    case PropertyDeclarationSyntax property:
+                    PropertyDeclarationSyntax property =>
                         // string x { get { return null; } }
                         // IEnumerable<string> Property { get { yield return null; } }
-                        return TryGetReturnType(property.Type, modifiers: default, onYield);
+                        TryGetReturnType(property.Type, modifiers: default, onYield),
 
-                    default:
-                        return null;
-                }
+                    _ => null,
+                };
             }
 
             // string x = null;
@@ -153,7 +172,7 @@ namespace Microsoft.CodeAnalysis.CSharp.CodeFixes.DeclareAsNullable
             return null;
 
             // local functions
-            TypeSyntax TryGetReturnType(TypeSyntax returnType, SyntaxTokenList modifiers, bool onYield)
+            static TypeSyntax TryGetReturnType(TypeSyntax returnType, SyntaxTokenList modifiers, bool onYield)
             {
                 if (modifiers.Any(SyntaxKind.AsyncKeyword) || onYield)
                 {
@@ -167,7 +186,7 @@ namespace Microsoft.CodeAnalysis.CSharp.CodeFixes.DeclareAsNullable
                 return returnType;
             }
 
-            TypeSyntax TryGetSingleTypeArgument(TypeSyntax type)
+            static TypeSyntax TryGetSingleTypeArgument(TypeSyntax type)
             {
                 switch (type)
                 {
@@ -186,12 +205,23 @@ namespace Microsoft.CodeAnalysis.CSharp.CodeFixes.DeclareAsNullable
             }
         }
 
+        private static bool IsExpressionSupported(SyntaxNode node)
+        {
+            return node.IsKind(
+                SyntaxKind.NullLiteralExpression,
+                SyntaxKind.AsExpression,
+                SyntaxKind.DefaultExpression,
+                SyntaxKind.DefaultLiteralExpression,
+                SyntaxKind.ConditionalExpression,
+                SyntaxKind.ConditionalAccessExpression);
+        }
+
         private class MyCodeAction : CodeAction.DocumentChangeAction
         {
-            public MyCodeAction(Func<CancellationToken, Task<Document>> createChangedDocument) :
-                base(CSharpFeaturesResources.Declare_as_nullable,
-                     createChangedDocument,
-                     CSharpFeaturesResources.Declare_as_nullable)
+            public MyCodeAction(Func<CancellationToken, Task<Document>> createChangedDocument, string equivalenceKey)
+                : base(CSharpFeaturesResources.Declare_as_nullable,
+                       createChangedDocument,
+                       equivalenceKey)
             {
             }
         }

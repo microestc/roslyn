@@ -1,5 +1,7 @@
 ﻿// Copyright (c) Microsoft.  All Rights Reserved.  Licensed under the Apache License, Version 2.0.  See License.txt in the project root for license information.
 
+#nullable enable
+
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
@@ -22,23 +24,21 @@ namespace Microsoft.VisualStudio.LanguageServices.Remote
         private readonly TraceSource _logger;
         private readonly JsonRpc _rpc;
 
-        private JsonRpcDisconnectedEventArgs _debuggingLastDisconnectReason;
-        private string _debuggingLastDisconnectCallstack;
+        private JsonRpcDisconnectedEventArgs? _debuggingLastDisconnectReason;
+        private string? _debuggingLastDisconnectCallstack;
 
-        public JsonRpcEx(Workspace workspace, TraceSource logger, Stream stream, object callbackTarget, bool useThisAsCallback)
+        public JsonRpcEx(Workspace workspace, TraceSource logger, Stream stream, object? callbackTarget, bool useThisAsCallback)
         {
-            Debug.Assert(workspace != null);
-            Debug.Assert(logger != null);
-            Debug.Assert(stream != null);
+            RoslynDebug.Assert(workspace != null);
+            RoslynDebug.Assert(logger != null);
+            RoslynDebug.Assert(stream != null);
 
             var target = useThisAsCallback ? this : callbackTarget;
 
             Workspace = workspace;
             _logger = logger;
 
-            _rpc = new JsonRpc(new JsonRpcMessageHandler(stream, stream), target);
-            _rpc.JsonSerializer.Converters.Add(AggregateJsonConverter.Instance);
-
+            _rpc = stream.CreateStreamJsonRpc(target, logger);
             _rpc.Disconnected += OnDisconnected;
         }
 
@@ -60,12 +60,11 @@ namespace Microsoft.VisualStudio.LanguageServices.Remote
 
             try
             {
-
-                await _rpc.InvokeWithCancellationAsync(targetName, arguments, cancellationToken).ConfigureAwait(false);
+                await _rpc.InvokeWithCancellationAsync(targetName, arguments?.AsArray(), cancellationToken).ConfigureAwait(false);
             }
             catch (Exception ex) when (ReportUnlessCanceled(ex, cancellationToken))
             {
-                HandleException(ex, cancellationToken);
+                throw CreateSoftCrashException(ex, cancellationToken);
             }
         }
 
@@ -75,12 +74,11 @@ namespace Microsoft.VisualStudio.LanguageServices.Remote
 
             try
             {
-                return await _rpc.InvokeWithCancellationAsync<T>(targetName, arguments, cancellationToken).ConfigureAwait(false);
+                return await _rpc.InvokeWithCancellationAsync<T>(targetName, arguments?.AsArray(), cancellationToken).ConfigureAwait(false);
             }
             catch (Exception ex) when (ReportUnlessCanceled(ex, cancellationToken))
             {
-                HandleException(ex, cancellationToken);
-                return Contract.FailWithReturn<T>("can't reach here");
+                throw CreateSoftCrashException(ex, cancellationToken);
             }
         }
 
@@ -95,7 +93,7 @@ namespace Microsoft.VisualStudio.LanguageServices.Remote
             }
             catch (Exception ex) // no when since Extensions.InvokeAsync already recorded it
             {
-                HandleException(ex, cancellationToken);
+                throw CreateSoftCrashException(ex, cancellationToken);
             }
         }
 
@@ -110,30 +108,14 @@ namespace Microsoft.VisualStudio.LanguageServices.Remote
             }
             catch (Exception ex) // no when since Extensions.InvokeAsync already recorded it
             {
-                HandleException(ex, cancellationToken);
-                return Contract.FailWithReturn<T>("can't reach here");
+                throw CreateSoftCrashException(ex, cancellationToken);
             }
-        }
-
-        private void HandleException(Exception ex, CancellationToken cancellationToken)
-        {
-            // StreamJsonRpc throws RemoteInvocationException if the call is cancelled.
-            // Handle this case by throwing a proper cancellation exception instead.
-            // See https://github.com/Microsoft/vs-streamjsonrpc/issues/67
-            cancellationToken.ThrowIfCancellationRequested();
-
-            LogError($"exception: {ex.ToString()}");
-
-            // we are getting unexpected exception from service hub. rather than doing hard crash on unexpected exception,
-            // we decided to do soft crash where we show info bar to users saying "VS got corrupted and users should save
-            // thier works and close VS"
-            ThrowSoftCrashException(ex, cancellationToken);
         }
 
         // these are for debugging purpose. once we find out root cause of the issue
         // we will remove these.
-        private static JsonRpcDisconnectedEventArgs s_debuggingLastDisconnectReason;
-        private static string s_debuggingLastDisconnectCallstack;
+        private static JsonRpcDisconnectedEventArgs? s_debuggingLastDisconnectReason;
+        private static string? s_debuggingLastDisconnectCallstack;
 
         private bool ReportUnlessCanceled(Exception ex, CancellationToken cancellationToken)
         {
@@ -156,15 +138,23 @@ namespace Microsoft.VisualStudio.LanguageServices.Remote
             return true;
         }
 
-        private void ThrowSoftCrashException(Exception ex, CancellationToken token)
+        private SoftCrashException CreateSoftCrashException(Exception ex, CancellationToken cancellationToken)
         {
-            RemoteHostCrashInfoBar.ShowInfoBar(Workspace);
+
+            // we are getting unexpected exception from service hub. rather than doing hard crash on unexpected exception,
+            // we decided to do soft crash where we show info bar to users saying "VS got corrupted and users should save
+            // their works and close VS"
+
+            cancellationToken.ThrowIfCancellationRequested();
+
+            LogError($"exception: {ex.ToString()}");
+            RemoteHostCrashInfoBar.ShowInfoBar(Workspace, ex);
 
             // log disconnect information before throw
             LogDisconnectInfo(_debuggingLastDisconnectReason, _debuggingLastDisconnectCallstack);
 
             // throw soft crash exception
-            throw new SoftCrashException("remote host call failed", ex, token);
+            return new SoftCrashException("remote host call failed", ex, cancellationToken);
         }
 
         protected void Disconnect()
@@ -184,7 +174,7 @@ namespace Microsoft.VisualStudio.LanguageServices.Remote
             _logger.TraceEvent(TraceEventType.Error, 1, message);
         }
 
-        protected void LogDisconnectInfo(JsonRpcDisconnectedEventArgs e, string callstack)
+        protected void LogDisconnectInfo(JsonRpcDisconnectedEventArgs? e, string? callstack)
         {
             if (e != null)
             {

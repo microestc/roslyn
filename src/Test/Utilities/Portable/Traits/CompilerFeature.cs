@@ -34,5 +34,7 @@ namespace Microsoft.CodeAnalysis.Test.Utilities
         NullCoalescingAssignment,
         AsyncStreams,
         NullableReferenceTypes,
+        DefaultInterfaceImplementation,
+        LambdaDiscardParameters,
     }
 }

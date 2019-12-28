@@ -14,6 +14,7 @@ using Microsoft.VisualStudio.IntegrationTest.Utilities;
 using Microsoft.VisualStudio.IntegrationTest.Utilities.Input;
 using Roslyn.Test.Utilities;
 using Xunit;
+using Xunit.Abstractions;
 using ProjectUtils = Microsoft.VisualStudio.IntegrationTest.Utilities.Common.ProjectUtils;
 
 namespace Roslyn.VisualStudio.IntegrationTests.CSharp
@@ -23,8 +24,8 @@ namespace Roslyn.VisualStudio.IntegrationTests.CSharp
     {
         protected override string LanguageName => LanguageNames.CSharp;
 
-        public CSharpCodeActions(VisualStudioInstanceFactory instanceFactory)
-            : base(instanceFactory, nameof(CSharpCodeActions))
+        public CSharpCodeActions(VisualStudioInstanceFactory instanceFactory, ITestOutputHelper testOutputHelper)
+            : base(instanceFactory, testOutputHelper, nameof(CSharpCodeActions))
         {
         }
 
@@ -140,7 +141,7 @@ class C
             VisualStudio.Editor.Verify.TextContains("Second?.");
         }
 
-        [CriticalWpfFact]
+        [ConditionalWpfFact(typeof(LegacyEditorConfigCondition))]
         [Trait(Traits.Feature, Traits.Features.EditorConfig)]
         [Trait(Traits.Feature, Traits.Features.CodeActionsFixAllOccurrences)]
         [WorkItem(15003, "https://github.com/dotnet/roslyn/issues/15003")]
@@ -197,6 +198,12 @@ class C
             MarkupTestFile.GetSpans(markup, out var text, out ImmutableArray<TextSpan> spans);
             SetUpEditor(markup);
             VisualStudio.WaitForApplicationIdle(CancellationToken.None);
+            VisualStudio.Workspace.WaitForAllAsyncOperations(
+                Helper.HangMitigatingTimeout,
+                FeatureAttribute.Workspace,
+                FeatureAttribute.SolutionCrawler,
+                FeatureAttribute.DiagnosticService,
+                FeatureAttribute.ErrorSquiggles);
             VisualStudio.Editor.Verify.CodeActionsNotShowing();
 
             var editorConfig = @"root = true
@@ -205,14 +212,24 @@ class C
 csharp_style_expression_bodied_properties = true:warning
 ";
 
-            VisualStudio.SolutionExplorer.AddFile(new ProjectUtils.Project(ProjectName), ".editorconfig", editorConfig, open: false);
+            VisualStudio.SolutionExplorer.BeginWatchForCodingConventionsChange(new ProjectUtils.Project(ProjectName), "Class1.cs");
+            try
+            {
+                VisualStudio.SolutionExplorer.AddFile(new ProjectUtils.Project(ProjectName), ".editorconfig", editorConfig, open: false);
+            }
+            finally
+            {
+                VisualStudio.SolutionExplorer.EndWaitForCodingConventionsChange(Helper.HangMitigatingTimeout);
+            }
 
             // Wait for CodingConventions library events to propagate to the workspace
             VisualStudio.WaitForApplicationIdle(CancellationToken.None);
             VisualStudio.Workspace.WaitForAllAsyncOperations(
+                Helper.HangMitigatingTimeout,
                 FeatureAttribute.Workspace,
                 FeatureAttribute.SolutionCrawler,
-                FeatureAttribute.DiagnosticService);
+                FeatureAttribute.DiagnosticService,
+                FeatureAttribute.ErrorSquiggles);
             VisualStudio.Editor.InvokeCodeActionList();
             VisualStudio.Editor.Verify.CodeAction(
                 "Use expression body for properties",
@@ -228,14 +245,24 @@ csharp_style_expression_bodied_properties = true:warning
              * outcome for the modified .editorconfig style.
              */
 
-            VisualStudio.SolutionExplorer.SetFileContents(new ProjectUtils.Project(ProjectName), ".editorconfig", editorConfig.Replace("true:warning", "false:warning"));
+            VisualStudio.SolutionExplorer.BeginWatchForCodingConventionsChange(new ProjectUtils.Project(ProjectName), "Class1.cs");
+            try
+            {
+                VisualStudio.SolutionExplorer.SetFileContents(new ProjectUtils.Project(ProjectName), ".editorconfig", editorConfig.Replace("true:warning", "false:warning"));
+            }
+            finally
+            {
+                VisualStudio.SolutionExplorer.EndWaitForCodingConventionsChange(Helper.HangMitigatingTimeout);
+            }
 
             // Wait for CodingConventions library events to propagate to the workspace
             VisualStudio.WaitForApplicationIdle(CancellationToken.None);
             VisualStudio.Workspace.WaitForAllAsyncOperations(
+                Helper.HangMitigatingTimeout,
                 FeatureAttribute.Workspace,
                 FeatureAttribute.SolutionCrawler,
-                FeatureAttribute.DiagnosticService);
+                FeatureAttribute.DiagnosticService,
+                FeatureAttribute.ErrorSquiggles);
             VisualStudio.Editor.InvokeCodeActionList();
             VisualStudio.Editor.Verify.CodeAction(
                 "Use block body for properties",
@@ -464,8 +491,15 @@ public class P2 { }");
                 "Generate nested class 'Stream'",
                 "Generate new type...",
                 "Remove unused variable",
+                "Suppress or Configure issues",
                 "Suppress CS0168",
-                "in Source"
+                "in Source",
+                "Configure CS0168 severity",
+                "None",
+                "Silent",
+                "Suggestion",
+                "Warning",
+                "Error",
             };
 
             VisualStudio.Editor.Verify.CodeActions(expectedItems, applyFix: expectedItems[0], ensureExpectedItemsAreOrdered: true);
@@ -504,8 +538,15 @@ namespace NS
                 "Generate nested class 'Foober'",
                 "Generate new type...",
                 "Goober - using N;",
+                "Suppress or Configure issues",
                 "Suppress CS0168",
                 "in Source",
+                "Configure CS0168 severity",
+                "None",
+                "Silent",
+                "Suggestion",
+                "Warning",
+                "Error",
             };
 
             VisualStudio.Editor.Verify.CodeActions(expectedItems, applyFix: expectedItems[0], ensureExpectedItemsAreOrdered: true);
@@ -537,10 +578,17 @@ class Program
                 "Introduce constant for all occurrences of '2'",
                 "Introduce local constant for '2'",
                 "Introduce local constant for all occurrences of '2'",
-                "Extract Method",
+                "Extract method",
                 generateImplicitTitle,
+                "Suppress or Configure issues",
                 "Suppress CS0612",
                 "in Source",
+                "Configure CS0612 severity",
+                "None",
+                "Silent",
+                "Suggestion",
+                "Warning",
+                "Error",
             };
 
             VisualStudio.Editor.Verify.CodeActions(expectedItems, applyFix: generateImplicitTitle, ensureExpectedItemsAreOrdered: true);
@@ -594,6 +642,58 @@ public class Program
             VisualStudio.Editor.Verify.CodeActions(expectedItems, applyFix: expectedItems[0], ensureExpectedItemsAreOrdered: true);
             VisualStudio.Editor.Verify.TextContains("using System.Runtime.InteropServices");
 
+        }
+
+        [WpfFact(Skip = "https://github.com/dotnet/roslyn/issues/38198"), Trait(Traits.Feature, Traits.Features.CodeActionsConfiguration)]
+        public void ConfigureCodeStyleOptionValueAndSeverity()
+        {
+            SetUpEditor(@"
+using System;
+public class Program
+{
+    static void Main(string[] args)
+    {
+        var $$x = new Program();
+    }
+}");
+            VisualStudio.Editor.InvokeCodeActionList();
+            var expectedItems = new[]
+            {
+                "Use discard '__'",  // IDE0059
+                "Use explicit type instead of 'var'",   // IDE0008
+                "Configure or Suppress issues",
+                    "Configure IDE0008 code style",
+                        "csharp__style__var__elsewhere",
+                            "true",
+                            "false",
+                        "csharp__style__var__for__built__in__types",
+                            "true",
+                            "false",
+                        "csharp__style__var__when__type__is__apparent",
+                            "true",
+                            "false",
+                    "Configure IDE0008 severity",
+                        "None",
+                        "Silent",
+                        "Suggestion",
+                        "Warning",
+                        "Error",
+                    "Configure IDE0059 code style",
+                        "unused__local__variable",
+                        "discard__variable",
+                    "Configure IDE0059 severity",
+                        "None",
+                        "Silent",
+                        "Suggestion",
+                        "Warning",
+                        "Error",
+                    "Suppress IDE0059",
+                        "in Source",
+                        "in Suppression File",
+                        "in Source (attribute)",
+            };
+
+            VisualStudio.Editor.Verify.CodeActions(expectedItems, ensureExpectedItemsAreOrdered: true);
         }
     }
 }

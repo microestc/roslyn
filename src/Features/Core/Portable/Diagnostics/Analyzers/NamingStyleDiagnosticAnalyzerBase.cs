@@ -8,19 +8,22 @@ using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.CodeAnalysis.CodeStyle;
 using Microsoft.CodeAnalysis.NamingStyles;
+using Microsoft.CodeAnalysis.Options;
 using Microsoft.CodeAnalysis.Simplification;
 using Roslyn.Utilities;
 
 namespace Microsoft.CodeAnalysis.Diagnostics.Analyzers.NamingStyles
 {
-    internal abstract class NamingStyleDiagnosticAnalyzerBase<TLanguageKindEnum> :
-        AbstractBuiltInCodeStyleDiagnosticAnalyzer where TLanguageKindEnum : struct
+    internal abstract class NamingStyleDiagnosticAnalyzerBase<TLanguageKindEnum>
+        : AbstractBuiltInCodeStyleDiagnosticAnalyzer
+        where TLanguageKindEnum : struct
     {
         private static readonly LocalizableString s_localizableMessageFormat = new LocalizableResourceString(nameof(FeaturesResources.Naming_rule_violation_0), FeaturesResources.ResourceManager, typeof(FeaturesResources));
         private static readonly LocalizableString s_localizableTitleNamingStyle = new LocalizableResourceString(nameof(FeaturesResources.Naming_Styles), FeaturesResources.ResourceManager, typeof(FeaturesResources));
 
         protected NamingStyleDiagnosticAnalyzerBase()
             : base(IDEDiagnosticIds.NamingRuleId,
+                   option: null,    // No unique option to configure the diagnosticId
                    s_localizableTitleNamingStyle,
                    s_localizableMessageFormat)
         {
@@ -39,7 +42,7 @@ namespace Microsoft.CodeAnalysis.Diagnostics.Analyzers.NamingStyles
         // see https://github.com/dotnet/roslyn/issues/14061
         protected abstract ImmutableArray<TLanguageKindEnum> SupportedSyntaxKinds { get; }
 
-        public override bool OpenFileOnly(Workspace workspace) => true;
+        public override bool OpenFileOnly(OptionSet options) => true;
 
         protected override void InitializeWorker(AnalysisContext context)
             => context.RegisterCompilationStartAction(CompilationStartAction);

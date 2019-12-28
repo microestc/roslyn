@@ -7,8 +7,6 @@ using Microsoft.CodeAnalysis.CSharp.Syntax;
 
 namespace Microsoft.CodeAnalysis.CSharp
 {
-    // Note: this code has a copy-and-paste sibling in AbstractRegionDataFlowPass.
-    // Any fix to one should be applied to the other.
     internal abstract class AbstractRegionDataFlowPass : DefiniteAssignmentPass
     {
         internal AbstractRegionDataFlowPass(
@@ -29,7 +27,6 @@ namespace Microsoft.CodeAnalysis.CSharp
         /// </summary>
         protected override ImmutableArray<PendingBranch> Scan(ref bool badRegion)
         {
-            SetState(TopState());
             MakeSlots(MethodParameters);
             if ((object)MethodThisParameter != null) GetOrCreateSlot(MethodThisParameter);
             var result = base.Scan(ref badRegion);

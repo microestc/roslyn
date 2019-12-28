@@ -10,14 +10,14 @@ namespace Microsoft.CodeAnalysis.CSharp.Symbols
 {
     internal static class BaseTypeAnalysis
     {
-        internal static bool ClassDependsOn(NamedTypeSymbol depends, NamedTypeSymbol on)
+        internal static bool TypeDependsOn(NamedTypeSymbol depends, NamedTypeSymbol on)
         {
             Debug.Assert((object)depends != null);
             Debug.Assert((object)on != null);
             Debug.Assert(on.IsDefinition);
 
             var hs = PooledHashSet<Symbol>.GetInstance();
-            ClassDependsClosure(depends, depends.DeclaringCompilation, hs);
+            TypeDependsClosure(depends, depends.DeclaringCompilation, hs);
 
             var result = hs.Contains(on);
             hs.Free();
@@ -25,7 +25,7 @@ namespace Microsoft.CodeAnalysis.CSharp.Symbols
             return result;
         }
 
-        private static void ClassDependsClosure(NamedTypeSymbol type, CSharpCompilation currentCompilation, HashSet<Symbol> partialClosure)
+        private static void TypeDependsClosure(NamedTypeSymbol type, CSharpCompilation currentCompilation, HashSet<Symbol> partialClosure)
         {
             if ((object)type == null)
             {
@@ -35,12 +35,22 @@ namespace Microsoft.CodeAnalysis.CSharp.Symbols
             type = type.OriginalDefinition;
             if (partialClosure.Add(type))
             {
-                ClassDependsClosure(type.GetDeclaredBaseType(null), currentCompilation, partialClosure);
+                if (type.IsInterface)
+                {
+                    foreach (var bt in type.GetDeclaredInterfaces(null))
+                    {
+                        TypeDependsClosure(bt, currentCompilation, partialClosure);
+                    }
+                }
+                else
+                {
+                    TypeDependsClosure(type.GetDeclaredBaseType(null), currentCompilation, partialClosure);
+                }
 
                 // containment is interesting only for the current compilation
                 if (currentCompilation != null && type.IsFromCompilation(currentCompilation))
                 {
-                    ClassDependsClosure(type.ContainingType, currentCompilation, partialClosure);
+                    TypeDependsClosure(type.ContainingType, currentCompilation, partialClosure);
                 }
             }
         }
@@ -79,12 +89,13 @@ namespace Microsoft.CodeAnalysis.CSharp.Symbols
                 foreach (var member in type.GetMembersUnordered())
                 {
                     var field = member as FieldSymbol;
-                    if ((object)field == null || field.Type.TypeKind != TypeKind.Struct || field.IsStatic)
+                    var fieldType = field?.NonPointerType();
+                    if (fieldType is null || fieldType.TypeKind != TypeKind.Struct || field.IsStatic)
                     {
                         continue;
                     }
 
-                    StructDependsClosure((NamedTypeSymbol)field.Type.TypeSymbol, partialClosure, on);
+                    StructDependsClosure((NamedTypeSymbol)fieldType, partialClosure, on);
                 }
             }
         }
@@ -134,6 +145,12 @@ namespace Microsoft.CodeAnalysis.CSharp.Symbols
             }
         }
 
+        // NOTE: If we do not check HasPointerType, we will unconditionally
+        //       bind Type and that may cause infinite recursion.
+        //       HasPointerType can use syntax directly and break recursion.
+        internal static TypeSymbol NonPointerType(this FieldSymbol field) =>
+            field.HasPointerType ? null : field.Type;
+
         private static (bool definitelyManaged, bool hasGenerics) DependsOnDefinitelyManagedType(NamedTypeSymbol type, HashSet<Symbol> partialClosure)
         {
             Debug.Assert((object)type != null);
@@ -164,16 +181,13 @@ namespace Microsoft.CodeAnalysis.CSharp.Symbols
                         continue;
                     }
 
-                    // pointers are unmanaged
-                    // NOTE: If we do not check HasPointerType, we will unconditionally
-                    //       bind Type and that may cause infinite recursion.
-                    //       HasPointerType can use syntax directly and break recursion.
-                    if (field.HasPointerType)
+                    TypeSymbol fieldType = field.NonPointerType();
+                    if (fieldType is null)
                     {
+                        // pointers are unmanaged
                         continue;
                     }
 
-                    TypeSymbol fieldType = field.Type.TypeSymbol;
                     NamedTypeSymbol fieldNamedType = fieldType as NamedTypeSymbol;
                     if ((object)fieldNamedType == null)
                     {
@@ -216,8 +230,9 @@ namespace Microsoft.CodeAnalysis.CSharp.Symbols
         }
 
         /// <summary>
-        /// Returns a boolean value if we can determine whether the type is managed
-        /// without looking at its fields and Unset otherwise.
+        /// Returns True or False if we can determine whether the type is managed
+        /// without looking at its fields and Unknown otherwise.
+        /// Also returns whether or not the given type is generic.
         /// </summary>
         private static (ThreeState isManaged, bool hasGenerics) IsManagedTypeHelper(NamedTypeSymbol type)
         {
@@ -226,8 +241,6 @@ namespace Microsoft.CodeAnalysis.CSharp.Symbols
             {
                 type = type.GetEnumUnderlyingType();
             }
-
-            bool hasGenerics = type.TupleUnderlyingTypeOrSelf().GetArity() > 0;
 
             // Short-circuit common cases.
             switch (type.SpecialType)
@@ -251,12 +264,14 @@ namespace Microsoft.CodeAnalysis.CSharp.Symbols
                 case SpecialType.System_TypedReference:
                 case SpecialType.System_ArgIterator:
                 case SpecialType.System_RuntimeArgumentHandle:
-                    return (ThreeState.False, hasGenerics);
+                    return (ThreeState.False, false);
                 case SpecialType.None:
                 default:
                     // CONSIDER: could provide cases for other common special types.
                     break; // Proceed with additional checks.
             }
+
+            bool hasGenerics = type.IsGenericType;
             switch (type.TypeKind)
             {
                 case TypeKind.Enum:
@@ -265,34 +280,6 @@ namespace Microsoft.CodeAnalysis.CSharp.Symbols
                     return (ThreeState.Unknown, hasGenerics);
                 default:
                     return (ThreeState.True, hasGenerics);
-            }
-        }
-
-        internal static bool InterfaceDependsOn(NamedTypeSymbol depends, NamedTypeSymbol on)
-        {
-            Debug.Assert((object)depends != null);
-            Debug.Assert((object)on != null);
-            Debug.Assert(on.IsDefinition);
-
-            var hs = PooledHashSet<Symbol>.GetInstance();
-            InterfaceDependsClosure(depends, hs);
-
-            var result = hs.Contains(on);
-            hs.Free();
-
-            return result;
-        }
-
-        private static void InterfaceDependsClosure(NamedTypeSymbol type, HashSet<Symbol> partialClosure)
-        {
-            type = type.OriginalDefinition;
-            if (partialClosure.Add(type))
-            {
-                foreach (var bt in type.GetDeclaredInterfaces(null))
-                {
-                    InterfaceDependsClosure(bt, partialClosure);
-                    // containment is not interesting for interfaces as they cannot nest in C#
-                }
             }
         }
     }

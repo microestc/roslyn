@@ -9,6 +9,7 @@ using Microsoft.VisualStudio.IntegrationTest.Utilities;
 using Microsoft.VisualStudio.IntegrationTest.Utilities.Input;
 using Roslyn.Test.Utilities;
 using Xunit;
+using Xunit.Abstractions;
 
 namespace Roslyn.VisualStudio.IntegrationTests.Basic
 {
@@ -37,12 +38,12 @@ End Module";
 
         protected override string LanguageName => LanguageNames.VisualBasic;
 
-        public BasicExtractMethod(VisualStudioInstanceFactory instanceFactory)
-            : base(instanceFactory, nameof(BasicExtractMethod))
+        public BasicExtractMethod(VisualStudioInstanceFactory instanceFactory, ITestOutputHelper testOutputHelper)
+            : base(instanceFactory, testOutputHelper, nameof(BasicExtractMethod))
         {
         }
 
-        [WpfFact(Skip = "https://github.com/dotnet/roslyn/issues/33103")]
+        [WpfFact]
         [Trait(Traits.Feature, Traits.Features.ExtractMethod)]
         public void SimpleExtractMethod()
         {
@@ -77,7 +78,7 @@ End Module";
 
             MarkupTestFile.GetSpans(expectedMarkup, out var expectedText, out ImmutableArray<TextSpan> spans);
             VisualStudio.Editor.Verify.TextContains(expectedText);
-            VisualStudio.Workspace.WaitForAsyncOperations(FeatureAttribute.Rename);
+            VisualStudio.Workspace.WaitForAsyncOperations(Helper.HangMitigatingTimeout, FeatureAttribute.Rename);
             AssertEx.SetEqual(spans, VisualStudio.Editor.GetTagSpans(VisualStudio.InlineRenameDialog.ValidRenameTag));
 
             VisualStudio.Editor.SendKeys("SayHello", VirtualKey.Enter);
@@ -92,7 +93,7 @@ End Module";
             VisualStudio.Editor.SetText(TestSource);
             VisualStudio.Editor.PlaceCaret("a = 5", charsOffset: -1);
             VisualStudio.Editor.PlaceCaret("a * b", charsOffset: 1, extendSelection: true);
-            VisualStudio.Editor.Verify.CodeAction("Extract Method", applyFix: true, blockUntilComplete: true);
+            VisualStudio.Editor.Verify.CodeAction("Extract method", applyFix: true, blockUntilComplete: true);
 
             var expectedMarkup = @"
 Imports System
@@ -133,7 +134,7 @@ End Module";
             try
             {
                 VisualStudio.Workspace.SetFeatureOption("ExtractMethodOptions", "AllowMovingDeclaration", LanguageNames.VisualBasic, "true");
-                VisualStudio.Editor.Verify.CodeAction("Extract Method + Local", applyFix: true, blockUntilComplete: true);
+                VisualStudio.Editor.Verify.CodeAction("Extract method + local", applyFix: true, blockUntilComplete: true);
 
                 var expectedMarkup = @"
 Imports System

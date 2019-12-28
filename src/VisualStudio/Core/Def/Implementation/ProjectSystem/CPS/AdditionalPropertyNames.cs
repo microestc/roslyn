@@ -11,5 +11,8 @@ namespace Microsoft.VisualStudio.LanguageServices.ProjectSystem
         // https://github.com/dotnet/project-system/blob/master/src/Microsoft.VisualStudio.ProjectSystem.Managed/ProjectSystem/Rules/LanguageService.xaml
 
         public const string RootNamespace = nameof(RootNamespace);
+        public const string MaxSupportedLangVersion = nameof(MaxSupportedLangVersion);
+        public const string RunAnalyzers = nameof(RunAnalyzers);
+        public const string RunAnalyzersDuringLiveAnalysis = nameof(RunAnalyzersDuringLiveAnalysis);
     }
 }

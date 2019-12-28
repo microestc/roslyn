@@ -12,42 +12,42 @@ namespace Microsoft.CodeAnalysis.CSharp.Symbols
         /// <summary>
         /// Represents an anonymous type template's property symbol.
         /// </summary>
-        private sealed class AnonymousTypePropertySymbol : PropertySymbol
+        internal sealed class AnonymousTypePropertySymbol : PropertySymbol
         {
             private readonly NamedTypeSymbol _containingType;
-            private readonly TypeSymbolWithAnnotations _type;
+            private readonly TypeWithAnnotations _typeWithAnnotations;
             private readonly string _name;
             private readonly int _index;
             private readonly ImmutableArray<Location> _locations;
             private readonly AnonymousTypePropertyGetAccessorSymbol _getMethod;
             private readonly FieldSymbol _backingField;
 
-            internal AnonymousTypePropertySymbol(AnonymousTypeTemplateSymbol container, AnonymousTypeField field, TypeSymbolWithAnnotations fieldType, int index) :
-                this(container, field, fieldType, index, ImmutableArray<Location>.Empty, includeBackingField: true)
+            internal AnonymousTypePropertySymbol(AnonymousTypeTemplateSymbol container, AnonymousTypeField field, TypeWithAnnotations fieldTypeWithAnnotations, int index) :
+                this(container, field, fieldTypeWithAnnotations, index, ImmutableArray<Location>.Empty, includeBackingField: true)
             {
             }
 
             internal AnonymousTypePropertySymbol(AnonymousTypePublicSymbol container, AnonymousTypeField field, int index) :
-                this(container, field, field.Type, index, ImmutableArray.Create<Location>(field.Location), includeBackingField: false)
+                this(container, field, field.TypeWithAnnotations, index, ImmutableArray.Create<Location>(field.Location), includeBackingField: false)
             {
             }
 
             private AnonymousTypePropertySymbol(
                 NamedTypeSymbol container,
                 AnonymousTypeField field,
-                TypeSymbolWithAnnotations fieldType,
+                TypeWithAnnotations fieldTypeWithAnnotations,
                 int index,
                 ImmutableArray<Location> locations,
                 bool includeBackingField)
             {
                 Debug.Assert((object)container != null);
                 Debug.Assert((object)field != null);
-                Debug.Assert(!fieldType.IsNull);
+                Debug.Assert(fieldTypeWithAnnotations.HasType);
                 Debug.Assert(index >= 0);
                 Debug.Assert(!locations.IsDefault);
 
                 _containingType = container;
-                _type = fieldType;
+                _typeWithAnnotations = fieldTypeWithAnnotations;
                 _name = field.Name;
                 _index = index;
                 _locations = locations;
@@ -62,9 +62,9 @@ namespace Microsoft.CodeAnalysis.CSharp.Symbols
                 get { return RefKind.None; }
             }
 
-            public override TypeSymbolWithAnnotations Type
+            public override TypeWithAnnotations TypeWithAnnotations
             {
-                get { return _type; }
+                get { return _typeWithAnnotations; }
             }
 
             public override string Name
@@ -193,7 +193,7 @@ namespace Microsoft.CodeAnalysis.CSharp.Symbols
                 get { return _backingField; }
             }
 
-            public override bool Equals(object obj)
+            public override bool Equals(Symbol obj, TypeCompareKind compareKind)
             {
                 if (obj == null)
                 {
@@ -213,7 +213,7 @@ namespace Microsoft.CodeAnalysis.CSharp.Symbols
                 //  consider properties the same is the owning types are the same and 
                 //  the names are equal
                 return ((object)other != null) && other.Name == this.Name
-                    && other.ContainingType.Equals(this.ContainingType);
+                    && other.ContainingType.Equals(this.ContainingType, compareKind);
             }
 
             public override int GetHashCode()

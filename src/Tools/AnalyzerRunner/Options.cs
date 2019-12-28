@@ -4,10 +4,11 @@ using System;
 using System.Collections.Immutable;
 using System.IO;
 using System.Text.RegularExpressions;
+using Microsoft.CodeAnalysis.SolutionCrawler;
 
 namespace AnalyzerRunner
 {
-    internal class Options
+    internal sealed class Options
     {
         public readonly string AnalyzerPath;
         public readonly string SolutionPath;
@@ -22,8 +23,14 @@ namespace AnalyzerRunner
         public readonly Func<string, bool> TestDocumentMatch;
         public readonly int TestDocumentIterations;
         public readonly string LogFileName;
+        public readonly string ProfileRoot;
 
-        public Options(
+        // Options specific to incremental analyzers
+        public readonly bool UsePersistentStorage;
+        public readonly BackgroundAnalysisScope AnalysisScope;
+        public readonly ImmutableList<string> IncrementalAnalyzerNames;
+
+        private Options(
             string analyzerPath,
             string solutionPath,
             ImmutableHashSet<string> analyzerIds,
@@ -35,7 +42,11 @@ namespace AnalyzerRunner
             bool testDocuments,
             Func<string, bool> testDocumentMatch,
             int testDocumentIterations,
-            string logFileName)
+            string logFileName,
+            string profileRoot,
+            bool usePersistentStorage,
+            BackgroundAnalysisScope analysisScope,
+            ImmutableList<string> incrementalAnalyzerNames)
         {
             AnalyzerPath = analyzerPath;
             SolutionPath = solutionPath;
@@ -49,6 +60,10 @@ namespace AnalyzerRunner
             TestDocumentMatch = testDocumentMatch;
             TestDocumentIterations = testDocumentIterations;
             LogFileName = logFileName;
+            ProfileRoot = profileRoot;
+            UsePersistentStorage = usePersistentStorage;
+            AnalysisScope = analysisScope;
+            IncrementalAnalyzerNames = incrementalAnalyzerNames;
         }
 
         internal static Options Create(string[] args)
@@ -65,6 +80,10 @@ namespace AnalyzerRunner
             Func<string, bool> testDocumentMatch = _ => true;
             int testDocumentIterations = 10;
             string logFileName = null;
+            string profileRoot = null;
+            var usePersistentStorage = false;
+            var analysisScope = BackgroundAnalysisScope.Default;
+            var incrementalAnalyzerNames = ImmutableList.CreateBuilder<string>();
 
             int i = 0;
             while (i < args.Length)
@@ -105,6 +124,18 @@ namespace AnalyzerRunner
                         break;
                     case "/log":
                         logFileName = ReadValue();
+                        break;
+                    case "/profileroot":
+                        profileRoot = ReadValue();
+                        break;
+                    case "/persist":
+                        usePersistentStorage = true;
+                        break;
+                    case "/fsa":
+                        analysisScope = BackgroundAnalysisScope.FullSolution;
+                        break;
+                    case "/ia":
+                        incrementalAnalyzerNames.Add(ReadValue());
                         break;
                     default:
                         if (analyzerPath == null)
@@ -147,7 +178,11 @@ namespace AnalyzerRunner
                 testDocuments: testDocuments,
                 testDocumentMatch: testDocumentMatch,
                 testDocumentIterations: testDocumentIterations,
-                logFileName: logFileName);
+                logFileName: logFileName,
+                profileRoot: profileRoot,
+                usePersistentStorage: usePersistentStorage,
+                analysisScope: analysisScope,
+                incrementalAnalyzerNames: incrementalAnalyzerNames.ToImmutable());
         }
     }
 }

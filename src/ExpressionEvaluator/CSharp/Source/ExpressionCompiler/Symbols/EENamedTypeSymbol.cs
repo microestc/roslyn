@@ -90,6 +90,9 @@ namespace Microsoft.CodeAnalysis.CSharp.ExpressionEvaluator
             _methods = getMethods(currentFrame, this);
         }
 
+        protected override NamedTypeSymbol WithTupleDataCore(TupleExtraData newData)
+            => throw ExceptionUtilities.Unreachable;
+
         internal ImmutableArray<MethodSymbol> Methods
         {
             get { return _methods; }
@@ -120,7 +123,7 @@ namespace Microsoft.CodeAnalysis.CSharp.ExpressionEvaluator
             get { return _typeParameters; }
         }
 
-        internal override ImmutableArray<TypeSymbolWithAnnotations> TypeArgumentsNoUseSiteDiagnostics
+        internal override ImmutableArray<TypeWithAnnotations> TypeArgumentsWithAnnotationsNoUseSiteDiagnostics
         {
             get { return GetTypeParametersAsTypeArguments(); }
         }
@@ -235,6 +238,11 @@ namespace Microsoft.CodeAnalysis.CSharp.ExpressionEvaluator
             get { return false; }
         }
 
+        public sealed override bool AreLocalsZeroed
+        {
+            get { return true; }
+        }
+
         internal override TypeLayout Layout
         {
             get { return default(TypeLayout); }
@@ -310,7 +318,7 @@ namespace Microsoft.CodeAnalysis.CSharp.ExpressionEvaluator
             get { return false; }
         }
 
-        internal sealed override bool IsReadOnly
+        public sealed override bool IsReadOnly
         {
             get { return false; }
         }

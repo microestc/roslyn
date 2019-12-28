@@ -5,6 +5,7 @@ using System.Collections.Immutable;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
+using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CodeGeneration;
 using Microsoft.CodeAnalysis.Editing;
 using Microsoft.CodeAnalysis.FindSymbols;
@@ -17,14 +18,23 @@ namespace Microsoft.CodeAnalysis.Shared.Extensions
     internal static partial class SyntaxGeneratorExtensions
     {
         public static SyntaxNode CreateThrowNotImplementedStatement(
-            this SyntaxGenerator codeDefinitionFactory,
-            Compilation compilation)
+            this SyntaxGenerator codeDefinitionFactory, Compilation compilation)
         {
             return codeDefinitionFactory.ThrowStatement(
-               codeDefinitionFactory.ObjectCreationExpression(
-                   codeDefinitionFactory.TypeExpression(compilation.NotImplementedExceptionType(), addImport: false),
-                   SpecializedCollections.EmptyList<SyntaxNode>()));
+               CreateNotImplementedException(codeDefinitionFactory, compilation));
         }
+
+        public static SyntaxNode CreateThrowNotImplementedExpression(
+            this SyntaxGenerator codeDefinitionFactory, Compilation compilation)
+        {
+            return codeDefinitionFactory.ThrowExpression(
+               CreateNotImplementedException(codeDefinitionFactory, compilation));
+        }
+
+        private static SyntaxNode CreateNotImplementedException(SyntaxGenerator codeDefinitionFactory, Compilation compilation)
+            => codeDefinitionFactory.ObjectCreationExpression(
+                    codeDefinitionFactory.TypeExpression(compilation.NotImplementedExceptionType(), addImport: false),
+                    SpecializedCollections.EmptyList<SyntaxNode>());
 
         public static ImmutableArray<SyntaxNode> CreateThrowNotImplementedStatementBlock(
             this SyntaxGenerator codeDefinitionFactory, Compilation compilation)
@@ -65,19 +75,18 @@ namespace Microsoft.CodeAnalysis.Shared.Extensions
 
         public static (ImmutableArray<ISymbol> fields, ISymbol constructor) CreateFieldDelegatingConstructor(
             this SyntaxGenerator factory,
-            Compilation compilation,
+            SemanticModel semanticModel,
             string typeName,
             INamedTypeSymbol containingTypeOpt,
             ImmutableArray<IParameterSymbol> parameters,
             IDictionary<string, ISymbol> parameterToExistingFieldMap,
             IDictionary<string, string> parameterToNewFieldMap,
             bool addNullChecks,
-            bool preferThrowExpression,
-            CancellationToken cancellationToken)
+            bool preferThrowExpression)
         {
             var fields = factory.CreateFieldsForParameters(parameters, parameterToNewFieldMap);
             var statements = factory.CreateAssignmentStatements(
-                compilation, parameters, parameterToExistingFieldMap, parameterToNewFieldMap,
+                semanticModel, parameters, parameterToExistingFieldMap, parameterToNewFieldMap,
                 addNullChecks, preferThrowExpression).SelectAsArray(
                     s => s.WithAdditionalAnnotations(Simplifier.Annotation));
 
@@ -168,35 +177,37 @@ namespace Microsoft.CodeAnalysis.Shared.Extensions
             return false;
         }
 
-        public static SyntaxNode CreateThrowArgumentNullExpression(
-            this SyntaxGenerator factory,
-            Compilation compilation,
-            IParameterSymbol parameter)
-        {
-            return factory.ThrowExpression(
-                factory.ObjectCreationExpression(
-                    compilation.GetTypeByMetadataName("System.ArgumentNullException"),
-                    factory.NameOfExpression(
-                        factory.IdentifierName(parameter.Name))));
-        }
+        public static SyntaxNode CreateThrowArgumentNullExpression(this SyntaxGenerator factory, Compilation compilation, IParameterSymbol parameter)
+            => factory.ThrowExpression(CreateNewArgumentNullException(factory, compilation, parameter));
 
-        public static SyntaxNode CreateIfNullThrowStatement(
+        private static SyntaxNode CreateNewArgumentNullException(SyntaxGenerator factory, Compilation compilation, IParameterSymbol parameter)
+            => factory.ObjectCreationExpression(
+                compilation.GetTypeByMetadataName("System.ArgumentNullException"),
+                factory.NameOfExpression(
+                    factory.IdentifierName(parameter.Name)));
+
+        public static SyntaxNode CreateNullCheckAndThrowStatement(
             this SyntaxGenerator factory,
-            Compilation compilation,
+            SemanticModel semanticModel,
             IParameterSymbol parameter)
         {
+            var identifier = factory.IdentifierName(parameter.Name);
+            var nullExpr = factory.NullLiteralExpression();
+            var condition = factory.SupportsPatterns(semanticModel.SyntaxTree.Options)
+                ? factory.IsPatternExpression(identifier, factory.ConstantPattern(nullExpr))
+                : factory.ReferenceEqualsExpression(identifier, nullExpr);
+
+            // generates: if (s == null) throw new ArgumentNullException(nameof(s))
             return factory.IfStatement(
-                factory.ReferenceEqualsExpression(
-                    factory.IdentifierName(parameter.Name),
-                    factory.NullLiteralExpression()),
+               condition,
                 SpecializedCollections.SingletonEnumerable(
-                    factory.ExpressionStatement(
-                        factory.CreateThrowArgumentNullExpression(compilation, parameter))));
+                    factory.ThrowStatement(CreateNewArgumentNullException(
+                        factory, semanticModel.Compilation, parameter))));
         }
 
         public static ImmutableArray<SyntaxNode> CreateAssignmentStatements(
             this SyntaxGenerator factory,
-            Compilation compilation,
+            SemanticModel semanticModel,
             ImmutableArray<IParameterSymbol> parameters,
             IDictionary<string, ISymbol> parameterToExistingFieldMap,
             IDictionary<string, string> parameterToNewFieldMap,
@@ -233,7 +244,7 @@ namespace Microsoft.CodeAnalysis.Shared.Extensions
                                                  .WithAdditionalAnnotations(Simplifier.Annotation);
 
                         factory.AddAssignmentStatements(
-                            compilation, parameter, fieldAccess,
+                            semanticModel, parameter, fieldAccess,
                             addNullChecks, preferThrowExpression,
                             nullCheckStatements, assignStatements);
                     }
@@ -245,7 +256,7 @@ namespace Microsoft.CodeAnalysis.Shared.Extensions
 
         public static void AddAssignmentStatements(
              this SyntaxGenerator factory,
-             Compilation compilation,
+             SemanticModel semanticModel,
              IParameterSymbol parameter,
              SyntaxNode fieldAccess,
              bool addNullChecks,
@@ -253,12 +264,16 @@ namespace Microsoft.CodeAnalysis.Shared.Extensions
              ArrayBuilder<SyntaxNode> nullCheckStatements,
              ArrayBuilder<SyntaxNode> assignStatements)
         {
-            var shouldAddNullCheck = addNullChecks && parameter.Type.CanAddNullCheck();
-            if (shouldAddNullCheck && preferThrowExpression)
+            // Don't want to add a null check for something of the form `int?`.  The type was
+            // already declared as nullable to indicate that null is ok.  Adding a null check
+            // just disallows something that should be allowed.
+            var shouldAddNullCheck = addNullChecks && parameter.Type.CanAddNullCheck() && !parameter.Type.IsNullable();
+
+            if (shouldAddNullCheck && preferThrowExpression && factory.SupportsThrowExpression())
             {
                 // Generate: this.x = x ?? throw ...
                 assignStatements.Add(CreateAssignWithNullCheckStatement(
-                    factory, compilation, parameter, fieldAccess));
+                    factory, semanticModel.Compilation, parameter, fieldAccess));
             }
             else
             {
@@ -266,7 +281,7 @@ namespace Microsoft.CodeAnalysis.Shared.Extensions
                 {
                     // generate: if (x == null) throw ...
                     nullCheckStatements.Add(
-                        factory.CreateIfNullThrowStatement(compilation, parameter));
+                        factory.CreateNullCheckAndThrowStatement(semanticModel, parameter));
                 }
 
                 // generate: this.x = x;
@@ -421,6 +436,7 @@ namespace Microsoft.CodeAnalysis.Shared.Extensions
                 accessibility: overriddenProperty.ComputeResultantAccessibility(containingType),
                 modifiers: modifiers,
                 name: overriddenProperty.Name,
+                parameters: overriddenProperty.RemoveInaccessibleAttributesAndAttributesOfTypes(containingType).Parameters,
                 isIndexer: overriddenProperty.IsIndexer(),
                 getMethod: accessorGet,
                 setMethod: accessorSet);
@@ -519,7 +535,7 @@ namespace Microsoft.CodeAnalysis.Shared.Extensions
                 }
 
                 return CodeGenerationSymbolFactory.CreateMethodSymbol(
-                    method: overriddenMethod,
+                    method: overriddenMethod.RemoveInaccessibleAttributesAndAttributesOfTypes(newContainingType),
                     accessibility: overriddenMethod.ComputeResultantAccessibility(newContainingType),
                     modifiers: modifiers,
                     statements: overriddenMethod.ReturnsVoid

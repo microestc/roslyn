@@ -6,6 +6,7 @@ using Microsoft.VisualStudio.IntegrationTest.Utilities;
 using Microsoft.VisualStudio.IntegrationTest.Utilities.OutOfProcess;
 using Roslyn.Test.Utilities;
 using Xunit;
+using Xunit.Abstractions;
 using ProjectUtils = Microsoft.VisualStudio.IntegrationTest.Utilities.Common.ProjectUtils;
 
 namespace Roslyn.VisualStudio.IntegrationTests.CSharp
@@ -17,8 +18,8 @@ namespace Roslyn.VisualStudio.IntegrationTests.CSharp
 
         private ExtractInterfaceDialog_OutOfProc ExtractInterfaceDialog => VisualStudio.ExtractInterfaceDialog;
 
-        public CSharpExtractInterfaceDialog(VisualStudioInstanceFactory instanceFactory)
-            : base(instanceFactory, nameof(CSharpExtractInterfaceDialog))
+        public CSharpExtractInterfaceDialog(VisualStudioInstanceFactory instanceFactory, ITestOutputHelper testOutputHelper)
+            : base(instanceFactory, testOutputHelper, nameof(CSharpExtractInterfaceDialog))
         {
         }
 
@@ -31,7 +32,7 @@ namespace Roslyn.VisualStudio.IntegrationTests.CSharp
 }
 ");
             VisualStudio.Editor.InvokeCodeActionList();
-            VisualStudio.Editor.Verify.CodeAction("Extract Interface...",
+            VisualStudio.Editor.Verify.CodeAction("Extract interface...",
                 applyFix: true,
                 blockUntilComplete: false);
 
@@ -55,7 +56,7 @@ namespace Roslyn.VisualStudio.IntegrationTests.CSharp
 }
 ");
             VisualStudio.Editor.InvokeCodeActionList();
-            VisualStudio.Editor.Verify.CodeAction("Extract Interface...",
+            VisualStudio.Editor.Verify.CodeAction("Extract interface...",
                 applyFix: true,
                 blockUntilComplete: false);
 
@@ -79,7 +80,7 @@ namespace Roslyn.VisualStudio.IntegrationTests.CSharp
 ");
 
             VisualStudio.Editor.InvokeCodeActionList();
-            VisualStudio.Editor.Verify.CodeAction("Extract Interface...",
+            VisualStudio.Editor.Verify.CodeAction("Extract interface...",
                 applyFix: true,
                 blockUntilComplete: false);
 
@@ -117,7 +118,7 @@ namespace Roslyn.VisualStudio.IntegrationTests.CSharp
 ");
 
             VisualStudio.Editor.InvokeCodeActionList();
-            VisualStudio.Editor.Verify.CodeAction("Extract Interface...",
+            VisualStudio.Editor.Verify.CodeAction("Extract interface...",
                 applyFix: true,
                 blockUntilComplete: false);
 
@@ -152,7 +153,7 @@ namespace Roslyn.VisualStudio.IntegrationTests.CSharp
 }
 ");
             VisualStudio.Editor.InvokeCodeActionList();
-            VisualStudio.Editor.Verify.CodeAction("Extract Interface...",
+            VisualStudio.Editor.Verify.CodeAction("Extract interface...",
                 applyFix: true,
                 blockUntilComplete: false);
 
@@ -188,7 +189,7 @@ class C : IC
 ");
 
             VisualStudio.Editor.InvokeCodeActionList();
-            VisualStudio.Editor.Verify.CodeAction("Extract Interface...",
+            VisualStudio.Editor.Verify.CodeAction("Extract interface...",
                 applyFix: true,
                 blockUntilComplete: false);
 
@@ -224,7 +225,7 @@ class C : IC
 }
 ");
             VisualStudio.Editor.InvokeCodeActionList();
-            VisualStudio.Editor.Verify.CodeAction("Extract Interface...",
+            VisualStudio.Editor.Verify.CodeAction("Extract interface...",
                 applyFix: true,
                 blockUntilComplete: false);
 
@@ -260,7 +261,7 @@ class C : IC
 }
 ");
             VisualStudio.Editor.InvokeCodeActionList();
-            VisualStudio.Editor.Verify.CodeAction("Extract Interface...",
+            VisualStudio.Editor.Verify.CodeAction("Extract interface...",
                 applyFix: true,
                 blockUntilComplete: false);
 

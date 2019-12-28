@@ -16,8 +16,15 @@ namespace Microsoft.CodeAnalysis.CSharp.MakeLocalFunctionStatic
     [ExportCodeFixProvider(LanguageNames.CSharp, Name = nameof(MakeLocalFunctionStaticCodeFixProvider)), Shared]
     internal class MakeLocalFunctionStaticCodeFixProvider : SyntaxEditorBasedCodeFixProvider
     {
+        [ImportingConstructor]
+        public MakeLocalFunctionStaticCodeFixProvider()
+        {
+        }
+
         public override ImmutableArray<string> FixableDiagnosticIds { get; } =
             ImmutableArray.Create(IDEDiagnosticIds.MakeLocalFunctionStaticDiagnosticId);
+
+        internal sealed override CodeFixCategory CodeFixCategory => CodeFixCategory.CodeQuality;
 
         public override Task RegisterCodeFixesAsync(CodeFixContext context)
         {
@@ -37,9 +44,7 @@ namespace Microsoft.CodeAnalysis.CSharp.MakeLocalFunctionStatic
             {
                 editor.ReplaceNode(
                     localFunction,
-                    (current, generator) => generator.WithModifiers(
-                        current,
-                        generator.GetModifiers(current).WithIsStatic(true)));
+                    (current, generator) => MakeLocalFunctionStaticHelper.AddStaticModifier(current, generator));
             }
 
             return Task.CompletedTask;

@@ -4,14 +4,15 @@ using Microsoft.CodeAnalysis.Test.Utilities;
 using Microsoft.VisualStudio.IntegrationTest.Utilities;
 using Roslyn.Test.Utilities;
 using Xunit;
+using Xunit.Abstractions;
 
 namespace Roslyn.VisualStudio.IntegrationTests.CSharp
 {
     [Collection(nameof(SharedIntegrationHostFixture))]
     public class CSharpErrorListDesktop : CSharpErrorListCommon
     {
-        public CSharpErrorListDesktop(VisualStudioInstanceFactory instanceFactory)
-            : base(instanceFactory, WellKnownProjectTemplates.ClassLibrary)
+        public CSharpErrorListDesktop(VisualStudioInstanceFactory instanceFactory, ITestOutputHelper testOutputHelper)
+            : base(instanceFactory, testOutputHelper, WellKnownProjectTemplates.ClassLibrary)
         {
         }
 
@@ -31,6 +32,13 @@ namespace Roslyn.VisualStudio.IntegrationTests.CSharp
         public override void ErrorsDuringMethodBodyEditing()
         {
             base.ErrorsDuringMethodBodyEditing();
+        }
+
+        [WpfFact, Trait(Traits.Feature, Traits.Features.ErrorList)]
+        [WorkItem(39902, "https://github.com/dotnet/roslyn/issues/39902")]
+        public override void ErrorsAfterClosingFile()
+        {
+            base.ErrorsAfterClosingFile();
         }
     }
 }

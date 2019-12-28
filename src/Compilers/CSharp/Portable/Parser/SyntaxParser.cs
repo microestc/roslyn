@@ -439,6 +439,13 @@ namespace Microsoft.CodeAnalysis.CSharp.Syntax.InternalSyntax
             return ct;
         }
 
+        /// <summary>
+        /// Returns and consumes the current token if it has the requested <paramref name="kind"/>.
+        /// Otherwise, returns <see langword="null"/>.
+        /// </summary>
+        protected SyntaxToken TryEatToken(SyntaxKind kind)
+            => this.CurrentToken.Kind == kind ? this.EatToken() : null;
+
         private void MoveToNextToken()
         {
             _prevTokenTrailingTrivia = _currentToken.GetTrailingTrivia();
@@ -1042,6 +1049,7 @@ namespace Microsoft.CodeAnalysis.CSharp.Syntax.InternalSyntax
             get { return lexer.Directives; }
         }
 
+#nullable enable
         /// <remarks>
         /// NOTE: we are specifically diverging from dev11 to improve the user experience.
         /// Since treating the "async" keyword as an identifier in older language
@@ -1070,7 +1078,7 @@ namespace Microsoft.CodeAnalysis.CSharp.Syntax.InternalSyntax
                             new CSharpRequiredLanguageVersion(requiredVersion));
             }
 
-            var info = feature.GetFeatureAvailabilityDiagnosticInfoOpt(this.Options);
+            var info = feature.GetFeatureAvailabilityDiagnosticInfo(this.Options);
             if (info != null)
             {
                 if (forceWarning)
@@ -1083,6 +1091,7 @@ namespace Microsoft.CodeAnalysis.CSharp.Syntax.InternalSyntax
 
             return node;
         }
+#nullable restore
 
         protected bool IsFeatureEnabled(MessageID feature)
         {

@@ -28,27 +28,28 @@ namespace Microsoft.CodeAnalysis.Diagnostics.Log
             "Analyzer.OperationBlockStart",
             "Analyzer.SymbolEnd",
             "Analyzer.SymbolStart",
+            "Analyzer.Suppression",
         };
 
-        private readonly DiagnosticAnalyzerService _owner;
+        private readonly DiagnosticAnalyzerService _analyzerService;
         private ImmutableDictionary<Type, AnalyzerInfo> _analyzerInfoMap;
 
-        public DiagnosticLogAggregator(DiagnosticAnalyzerService owner)
+        public DiagnosticLogAggregator(DiagnosticAnalyzerService analyzerService)
         {
-            _owner = owner;
+            _analyzerService = analyzerService;
             _analyzerInfoMap = ImmutableDictionary<Type, AnalyzerInfo>.Empty;
         }
 
         public IEnumerable<KeyValuePair<Type, AnalyzerInfo>> AnalyzerInfoMap => _analyzerInfoMap;
 
-        public void UpdateAnalyzerTypeCount(DiagnosticAnalyzer analyzer, AnalyzerTelemetryInfo analyzerTelemetryInfo, Project projectOpt)
+        public void UpdateAnalyzerTypeCount(DiagnosticAnalyzer analyzer, AnalyzerTelemetryInfo analyzerTelemetryInfo)
         {
-            var telemetry = DiagnosticAnalyzerLogger.AllowsTelemetry(analyzer, _owner);
+            var isTelemetryAllowed = DiagnosticAnalyzerLogger.AllowsTelemetry(analyzer, _analyzerService);
 
             ImmutableInterlocked.AddOrUpdate(
                 ref _analyzerInfoMap,
                 analyzer.GetType(),
-                addValue: new AnalyzerInfo(analyzer, analyzerTelemetryInfo, telemetry),
+                addValue: new AnalyzerInfo(analyzer, analyzerTelemetryInfo, isTelemetryAllowed),
                 updateValueFactory: (k, ai) =>
                 {
                     ai.SetAnalyzerTypeCount(analyzerTelemetryInfo);
@@ -87,6 +88,7 @@ namespace Microsoft.CodeAnalysis.Diagnostics.Log
                 Counts[13] = analyzerTelemetryInfo.OperationBlockStartActionsCount;
                 Counts[14] = analyzerTelemetryInfo.SymbolStartActionsCount;
                 Counts[15] = analyzerTelemetryInfo.SymbolEndActionsCount;
+                Counts[16] = analyzerTelemetryInfo.SuppressionActionsCount;
             }
         }
     }

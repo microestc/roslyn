@@ -138,6 +138,8 @@ namespace Microsoft.CodeAnalysis.UnitTests.TestFiles
                 public static string NetCoreApp2AndTwoLibraries_Library1 => GetText("NetCoreApp2AndTwoLibraries.Library1.csproj");
                 public static string NetCoreApp2AndTwoLibraries_Library2 => GetText("NetCoreApp2AndTwoLibraries.Library2.csproj");
                 public static string NetCoreMultiTFM_Project => GetText("NetCoreMultiTFM.Project.csproj");
+                public static string NetCoreMultiTFM_ExtensionWithConditionOnTFM_Project => GetText("NetCoreMultiTFM_ExtensionWithConditionOnTFM.Project.csproj");
+                public static string NetCoreMultiTFM_ExtensionWithConditionOnTFM_ProjectTestProps => GetText("NetCoreMultiTFM_ExtensionWithConditionOnTFM.Project.csproj.test.props");
                 public static string NetCoreMultiTFM_ProjectReference_Library => GetText("NetCoreMultiTFM_ProjectReference.Library.csproj");
                 public static string NetCoreMultiTFM_ProjectReference_Project => GetText("NetCoreMultiTFM_ProjectReference.Project.csproj");
                 public static string NetCoreMultiTFM_ProjectReferenceToFSharp_CSharpLib = GetText("NetCoreMultiTFM_ProjectReferenceToFSharp.csharplib.csharplib.csproj");
@@ -149,6 +151,7 @@ namespace Microsoft.CodeAnalysis.UnitTests.TestFiles
                 public static string ReferencesPortableProject => GetText("ProjectFiles.CSharp.ReferencesPortableProject.csproj");
                 public static string Wildcards => GetText("ProjectFiles.CSharp.Wildcards.csproj");
                 public static string WithoutCSharpTargetsImported => GetText("ProjectFiles.CSharp.WithoutCSharpTargetsImported.csproj");
+                public static string WithDiscoverEditorConfigFiles => GetText("ProjectFiles.CSharp.WithDiscoverEditorConfigFiles.csproj");
                 public static string WithPrefer32Bit => GetText("ProjectFiles.CSharp.WithPrefer32Bit.csproj");
                 public static string WithLink => GetText("ProjectFiles.CSharp.WithLink.csproj");
                 public static string WithSystemNumerics => GetText("ProjectFiles.CSharp.WithSystemNumerics.csproj");

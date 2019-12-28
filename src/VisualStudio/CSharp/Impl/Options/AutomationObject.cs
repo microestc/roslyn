@@ -74,25 +74,24 @@ namespace Microsoft.VisualStudio.LanguageServices.CSharp.Options
             set { SetBooleanOption(CompletionOptions.ShowCompletionItemFilters, value); }
         }
 
-        [Obsolete("This SettingStore option has now been deprecated in favor of CSharpClosedFileDiagnostics")]
-        public int ClosedFileDiagnostics
+        public int ShowItemsFromUnimportedNamespaces
         {
-            get { return GetBooleanOption(ServiceFeatureOnOffOptions.ClosedFileDiagnostic); }
-            set
-            {
-                // Even though this option has been deprecated, we want to respect the setting if the user has explicitly turned off closed file diagnostics (which is the non-default value for 'ClosedFileDiagnostics').
-                // So, we invoke the setter only for value = 0.
-                if (value == 0)
-                {
-                    SetBooleanOption(ServiceFeatureOnOffOptions.ClosedFileDiagnostic, value);
-                }
-            }
+            get { return GetBooleanOption(CompletionOptions.ShowItemsFromUnimportedNamespaces); }
+            set { SetBooleanOption(CompletionOptions.ShowItemsFromUnimportedNamespaces, value); }
         }
 
+        [Obsolete("ClosedFileDiagnostics has been deprecated")]
+        public int ClosedFileDiagnostics
+        {
+            get { return 0; }
+            set { }
+        }
+
+        [Obsolete("CSharpClosedFileDiagnostics has been deprecated")]
         public int CSharpClosedFileDiagnostics
         {
-            get { return GetBooleanOption(ServiceFeatureOnOffOptions.ClosedFileDiagnostic); }
-            set { SetBooleanOption(ServiceFeatureOnOffOptions.ClosedFileDiagnostic, value); }
+            get { return 0; }
+            set { }
         }
 
         public int DisplayLineSeparators
@@ -582,8 +581,8 @@ namespace Microsoft.VisualStudio.LanguageServices.CSharp.Options
 
         public string Style_PreferThrowExpression
         {
-            get { return GetXmlOption(CodeStyleOptions.PreferThrowExpression); }
-            set { SetXmlOption(CodeStyleOptions.PreferThrowExpression, value); }
+            get { return GetXmlOption(CSharpCodeStyleOptions.PreferThrowExpression); }
+            set { SetXmlOption(CSharpCodeStyleOptions.PreferThrowExpression, value); }
         }
 
         public string Style_PreferObjectInitializer
@@ -612,8 +611,8 @@ namespace Microsoft.VisualStudio.LanguageServices.CSharp.Options
 
         public string Style_PreferInlinedVariableDeclaration
         {
-            get { return GetXmlOption(CodeStyleOptions.PreferInlinedVariableDeclaration); }
-            set { SetXmlOption(CodeStyleOptions.PreferInlinedVariableDeclaration, value); }
+            get { return GetXmlOption(CSharpCodeStyleOptions.PreferInlinedVariableDeclaration); }
+            set { SetXmlOption(CSharpCodeStyleOptions.PreferInlinedVariableDeclaration, value); }
         }
 
         public string Style_PreferExplicitTupleNames
@@ -643,26 +642,32 @@ namespace Microsoft.VisualStudio.LanguageServices.CSharp.Options
 
         public string Style_UseImplicitTypeWherePossible
         {
-            get { return GetXmlOption(CSharpCodeStyleOptions.UseImplicitTypeWherePossible); }
-            set { SetXmlOption(CSharpCodeStyleOptions.UseImplicitTypeWherePossible, value); }
+            get { return GetXmlOption(CSharpCodeStyleOptions.VarElsewhere); }
+            set { SetXmlOption(CSharpCodeStyleOptions.VarElsewhere, value); }
         }
 
         public string Style_UseImplicitTypeWhereApparent
         {
-            get { return GetXmlOption(CSharpCodeStyleOptions.UseImplicitTypeWhereApparent); }
-            set { SetXmlOption(CSharpCodeStyleOptions.UseImplicitTypeWhereApparent, value); }
+            get { return GetXmlOption(CSharpCodeStyleOptions.VarWhenTypeIsApparent); }
+            set { SetXmlOption(CSharpCodeStyleOptions.VarWhenTypeIsApparent, value); }
         }
 
         public string Style_UseImplicitTypeForIntrinsicTypes
         {
-            get { return GetXmlOption(CSharpCodeStyleOptions.UseImplicitTypeForIntrinsicTypes); }
-            set { SetXmlOption(CSharpCodeStyleOptions.UseImplicitTypeForIntrinsicTypes, value); }
+            get { return GetXmlOption(CSharpCodeStyleOptions.VarForBuiltInTypes); }
+            set { SetXmlOption(CSharpCodeStyleOptions.VarForBuiltInTypes, value); }
         }
 
         public string Style_PreferConditionalDelegateCall
         {
             get { return GetXmlOption(CSharpCodeStyleOptions.PreferConditionalDelegateCall); }
             set { SetXmlOption(CSharpCodeStyleOptions.PreferConditionalDelegateCall, value); }
+        }
+
+        public string Style_PreferSwitchExpression
+        {
+            get { return GetXmlOption(CSharpCodeStyleOptions.PreferSwitchExpression); }
+            set { SetXmlOption(CSharpCodeStyleOptions.PreferSwitchExpression, value); }
         }
 
         public string Style_PreferPatternMatchingOverAsWithNullCheck

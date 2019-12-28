@@ -229,5 +229,80 @@ public static class Class
             var comp = CreateCompilation(source);
             comp.VerifyDiagnostics();
         }
+
+        [Fact, WorkItem(35949, "https://github.com/dotnet/roslyn/issues/35949")]
+        public void NotNull_Complexity()
+        {
+            var source = @"
+#nullable enable
+using System;
+using System.Diagnostics.CodeAnalysis;
+class C
+{
+    C f = null!;
+
+    void M(C c)
+    {
+        c.f = c;
+        c.NotNull(
+            x => x.f.NotNull(
+                y => y.f.NotNull(
+                    z => z.f.NotNull(
+                        q => q.f.NotNull(
+                            w => w.f.NotNull(
+                                e => e.f.NotNull(
+                                    r => r.f.NotNull(
+                                        _ =>
+                                        {
+                                            """".NotNull(s => s);
+                                            """".NotNull(s => s);
+                                            """".NotNull(s => s);
+                                            """".NotNull(s => s);
+                                            """".NotNull(s => s);
+                                            """".NotNull(s => s);
+                                            """".NotNull(s => s);
+                                            """".NotNull(s => s);
+                                            """".NotNull(s => s);
+                                            """".NotNull(s => s);
+                                            """".NotNull(s => s);
+                                            """".NotNull(s => s);
+
+                                            return """";
+                                        }))))))));
+    }
+}
+
+static class Ext
+{
+    public static V NotNull<T, V>([NotNull] this T t, Func<T, V> f) => throw null!;
+}
+";
+            var comp = CreateCompilation(new[] { NotNullAttributeDefinition, source });
+            comp.VerifyDiagnostics();
+        }
+
+        [ConditionalFactAttribute(typeof(IsRelease))]
+        [WorkItem(40495, "https://github.com/dotnet/roslyn/issues/40495")]
+        public void NestedLambdas()
+        {
+            var source =
+@"#nullable enable
+using System.Linq;
+class Program
+{
+    static void Main()
+    {
+        Enumerable.Range(0, 1).Sum(a =>
+            Enumerable.Range(0, 1).Sum(b =>
+            Enumerable.Range(0, 1).Sum(c =>
+            Enumerable.Range(0, 1).Sum(d =>
+            Enumerable.Range(0, 1).Sum(e =>
+            Enumerable.Range(0, 1).Sum(f =>
+            Enumerable.Range(0, 1).Count(g => true)))))));
+    }
+}";
+            var comp = CreateCompilation(source);
+            comp.VerifyDiagnostics();
+        }
     }
 }

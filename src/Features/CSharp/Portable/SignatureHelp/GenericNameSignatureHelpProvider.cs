@@ -21,6 +21,11 @@ namespace Microsoft.CodeAnalysis.CSharp.SignatureHelp
     [ExportSignatureHelpProvider("GenericNameSignatureHelpProvider", LanguageNames.CSharp), Shared]
     internal partial class GenericNameSignatureHelpProvider : AbstractCSharpSignatureHelpProvider
     {
+        [ImportingConstructor]
+        public GenericNameSignatureHelpProvider()
+        {
+        }
+
         public override bool IsTriggerCharacter(char ch)
         {
             return ch == '<' || ch == ',';
@@ -75,8 +80,7 @@ namespace Microsoft.CodeAnalysis.CSharp.SignatureHelp
                 return null;
             }
 
-            var simpleName = genericIdentifier.Parent as SimpleNameSyntax;
-            if (simpleName == null)
+            if (!(genericIdentifier.Parent is SimpleNameSyntax simpleName))
             {
                 return null;
             }
@@ -190,7 +194,7 @@ namespace Microsoft.CodeAnalysis.CSharp.SignatureHelp
                     symbol, semanticModel, position,
                     symbolDisplayService, anonymousTypeDisplayService,
                     false,
-                    c => symbol.GetDocumentationParts(semanticModel, position, documentationCommentFormattingService, c).Concat(GetAwaitableUsage(method, semanticModel, position)),
+                    c => symbol.GetDocumentationParts(semanticModel, position, documentationCommentFormattingService, c),
                     GetPreambleParts(method, semanticModel, position),
                     GetSeparatorParts(),
                     GetPostambleParts(method, semanticModel, position),
@@ -239,7 +243,7 @@ namespace Microsoft.CodeAnalysis.CSharp.SignatureHelp
                 parts.Add(Punctuation(SyntaxKind.ColonToken));
                 parts.Add(Space());
 
-                bool needComma = false;
+                var needComma = false;
 
                 // class/struct constraint must be first
                 if (typeParam.HasReferenceTypeConstraint)

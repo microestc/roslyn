@@ -21,8 +21,7 @@ namespace Microsoft.CodeAnalysis.CSharp
             TypeSymbol type,
             BoundFieldAccess oldNodeOpt = null)
         {
-
-            if (fieldSymbol.IsTupleField)
+            if (fieldSymbol.ContainingType.IsTupleType)
             {
                 return MakeTupleFieldAccess(syntax, fieldSymbol, rewrittenReceiver, constantValueOpt, resultKind);
             }
@@ -55,30 +54,30 @@ namespace Microsoft.CodeAnalysis.CSharp
         {
             var tupleType = tupleField.ContainingType;
 
-            NamedTypeSymbol currentLinkType = tupleType.TupleUnderlyingType;
+            NamedTypeSymbol currentLinkType = tupleType;
             FieldSymbol underlyingField = tupleField.TupleUnderlyingField;
 
             if ((object)underlyingField == null)
             {
                 // Use-site error must have been reported elsewhere.
-                return _factory.BadExpression(tupleField.Type.TypeSymbol);
+                return _factory.BadExpression(tupleField.Type);
             }
 
             if (rewrittenReceiver.Kind == BoundKind.DefaultExpression)
             {
                 // Optimization: `default((int, string)).Item2` is simply `default(string)`
-                return new BoundDefaultExpression(syntax, tupleField.Type.TypeSymbol);
+                return new BoundDefaultExpression(syntax, tupleField.Type);
             }
 
             if (!TypeSymbol.Equals(underlyingField.ContainingType, currentLinkType, TypeCompareKind.ConsiderEverything2))
             {
-                WellKnownMember wellKnownTupleRest = TupleTypeSymbol.GetTupleTypeMember(TupleTypeSymbol.RestPosition, TupleTypeSymbol.RestPosition);
-                var tupleRestField = (FieldSymbol)TupleTypeSymbol.GetWellKnownMemberInType(currentLinkType.OriginalDefinition, wellKnownTupleRest, _diagnostics, syntax);
+                WellKnownMember wellKnownTupleRest = NamedTypeSymbol.GetTupleTypeMember(NamedTypeSymbol.ValueTupleRestPosition, NamedTypeSymbol.ValueTupleRestPosition);
+                var tupleRestField = (FieldSymbol)NamedTypeSymbol.GetWellKnownMemberInType(currentLinkType.OriginalDefinition, wellKnownTupleRest, _diagnostics, syntax);
 
                 if ((object)tupleRestField == null)
                 {
                     // error tolerance for cases when Rest is missing
-                    return _factory.BadExpression(tupleField.Type.TypeSymbol);
+                    return _factory.BadExpression(tupleField.Type);
                 }
 
                 // make nested field accesses to Rest
@@ -87,7 +86,7 @@ namespace Microsoft.CodeAnalysis.CSharp
                     FieldSymbol nestedFieldSymbol = tupleRestField.AsMember(currentLinkType);
                     rewrittenReceiver = _factory.Field(rewrittenReceiver, nestedFieldSymbol);
 
-                    currentLinkType = currentLinkType.TypeArgumentsNoUseSiteDiagnostics[TupleTypeSymbol.RestPosition - 1].TypeSymbol.TupleUnderlyingType;
+                    currentLinkType = (NamedTypeSymbol)currentLinkType.TypeArgumentsWithAnnotationsNoUseSiteDiagnostics[NamedTypeSymbol.ValueTupleRestPosition - 1].Type;
                 }
                 while (!TypeSymbol.Equals(underlyingField.ContainingType, currentLinkType, TypeCompareKind.ConsiderEverything2));
             }

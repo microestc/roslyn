@@ -50,11 +50,11 @@ namespace BoundTreeGenerator
         public string Errors;
 
         /// <summary>
-        /// For nodes that have additional fields defined in code, it is necessary to provide
-        /// a hand-written implementation of ShallowClone.
+        /// For nodes such as BoundBinaryOperators where we use an iterative algorithm instead of the standard
+        /// recursive algorithm to deal with deeply-nested stacks
         /// </summary>
         [XmlAttribute]
-        public string SkipShallowClone;
+        public string SkipInNullabilityRewriter;
 
         [XmlElement(ElementName = "Kind", Type = typeof(Kind))]
         public List<Kind> Kinds;
@@ -91,6 +91,9 @@ namespace BoundTreeGenerator
 
         [XmlAttribute]
         public string SkipInVisitor;
+
+        [XmlAttribute]
+        public string SkipInNullabilityRewriter;
     }
 
     public class EnumType : TreeType

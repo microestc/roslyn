@@ -15,8 +15,19 @@ namespace Microsoft.CodeAnalysis.Editor.UnitTests
     {
         private ImmutableList<Exception> _exceptions = ImmutableList<Exception>.Empty;
 
+        [ImportingConstructor]
+        public TestExtensionErrorHandler()
+        {
+        }
+
         public void HandleError(object sender, Exception exception)
         {
+            // Work around bug that is fixed in https://devdiv.visualstudio.com/DevDiv/_git/VS-Platform/pullrequest/209513
+            if (exception is NullReferenceException && exception.StackTrace.Contains("SpanTrackingWpfToolTipPresenter"))
+            {
+                return;
+            }
+
             ExceptionUtilities.FailFast(exception);
         }
     }

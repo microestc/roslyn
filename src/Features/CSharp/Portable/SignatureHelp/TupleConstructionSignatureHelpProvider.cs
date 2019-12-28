@@ -24,6 +24,11 @@ namespace Microsoft.CodeAnalysis.CSharp.SignatureHelp
         private static readonly Func<TupleExpressionSyntax, IEnumerable<SyntaxNodeOrToken>> s_getArgumentsWithSeparators = e => e.Arguments.GetWithSeparators();
         private static readonly Func<TupleExpressionSyntax, IEnumerable<string>> s_getArgumentNames = e => e.Arguments.Select(a => a.NameColon?.Name.Identifier.ValueText ?? string.Empty);
 
+        [ImportingConstructor]
+        public TupleConstructionSignatureHelpProvider()
+        {
+        }
+
         public override SignatureHelpState GetCurrentArgumentState(SyntaxNode root, int position, ISyntaxFactsService syntaxFacts, TextSpan currentSpan, CancellationToken cancellationToken)
         {
             if (GetOuterMostTupleExpressionInSpan(root, position, syntaxFacts, currentSpan, cancellationToken, out var expression))
@@ -176,13 +181,11 @@ namespace Microsoft.CodeAnalysis.CSharp.SignatureHelp
             var result = new List<SignatureHelpParameter>();
             foreach (var element in tupleType.TupleElements)
             {
-                var type = element.Type;
-
                 // The display name for each element. 
                 // Empty strings for elements not explicitly declared
                 var elementName = element.IsImplicitlyDeclared ? string.Empty : element.Name;
 
-                var typeParts = type.ToMinimalDisplayParts(semanticModel, position).ToList();
+                var typeParts = element.Type.ToMinimalDisplayParts(semanticModel, position).ToList();
                 if (!string.IsNullOrEmpty(elementName))
                 {
                     typeParts.Add(spacePart);
